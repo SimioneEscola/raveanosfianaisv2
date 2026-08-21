@@ -3,8 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>R.A.V.E. – EE Prof. Luiz Simioni Sobrinho</title>
+<title>R.A.V.E. Anos Finais – EE Prof. Luiz Simioni Sobrinho</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&display=swap');
 
@@ -740,7 +741,7 @@
     <button class="tab-btn" onclick="switchTab('dash')" id="tab-dash">
       <span class="tab-icon">📊</span> Painel de Consulta
     </button>
-    <button class="tab-btn" onclick="switchTab('cad')" id="tab-cad"><span class="tab-icon">👤</span> Cadastrar Aluno</button>
+    <button class="tab-btn" onclick="switchTab('cad')" id="tab-cad"><span class="tab-icon">📤</span> Atualizar Alunos</button>
   </nav>
 </header>
 
@@ -1098,53 +1099,36 @@
 <div id="page-cad" class="tab-content">
 <div class="cad-page">
   <div class="form-intro">
-    <h2>👤 Cadastrar Novo Estudante</h2>
-    <p>Registre novos estudantes diretamente no sistema. Os dados são salvos localmente no navegador e ficam disponíveis nos formulários de ocorrência imediatamente.</p>
+    <h2>📤 Atualizar Estudantes via CSV</h2>
+    <p>Faça upload de um arquivo CSV para <strong>incluir ou atualizar</strong> estudantes no Supabase (tabela <code>alunos_extra_ef</code>).
+    Registros existentes (mesma turma + nome) são atualizados; novos são inseridos.
+    Estudantes que não constam no arquivo <strong>não são removidos</strong> — sem perda de dados.</p>
   </div>
   <div class="form-card">
     <div class="card-header" style="background:#f0f4ff;color:var(--navy);">
       <div class="cat-dot" style="background:var(--navy)"></div>
-      Dados do Estudante
+      Importar / Atualizar por CSV
     </div>
     <div class="card-body">
-      <div class="cad-grid" style="margin-bottom:16px">
-        <div class="field-group">
-          <label class="field-label">Turma <span class="req">*</span></label>
-          <select id="cad-turma" required><option value="">— selecione —</option></select>
-        </div>
-        <div class="field-group">
-          <label class="field-label">Nome Completo <span class="req">*</span></label>
-          <input type="text" id="cad-nome" placeholder="Nome em maiúsculas" style="text-transform:uppercase">
-        </div>
+      <div class="field-group" style="margin-bottom:14px">
+        <label class="field-label">Arquivo CSV</label>
+        <input type="file" id="cad-csv-file" accept=".csv,text/csv" style="padding:10px;border:1.5px dashed var(--border);border-radius:8px;background:#fafbff;width:100%">
       </div>
-      <div class="cad-grid" style="margin-bottom:16px">
-        <div class="field-group">
-          <label class="field-label">Data de Nascimento</label>
-          <input type="date" id="cad-nasc">
-        </div>
-        <div class="field-group">
-          <label class="field-label">Situação</label>
-          <select id="cad-sit">
-            <option value="ATIVO">ATIVO</option>
-            <option value="TRAN">TRANSFERIDO (TRAN)</option>
-            <option value="REMA">REMANEJADO (REMA)</option>
-          </select>
-        </div>
+      <div style="font-size:.72rem;color:var(--text-muted);line-height:1.55;margin-bottom:16px;background:#f8faff;border-radius:8px;padding:12px 14px;border:1px solid var(--border)">
+        <strong style="color:var(--navy)">Formato esperado (cabeçalho):</strong><br>
+        <code style="font-size:.7rem">Turma,Nome,Nascimento,Endereço,Deficiência,Situação</code><br>
+        • <em>Turma</em>: código (ex.: 6A, 9B) ou rótulo<br>
+        • <em>Nome</em>: nome completo (maiúsculas)<br>
+        • <em>Nascimento</em>: DD/MM/AAAA ou AAAA-MM-DD<br>
+        • <em>Situação</em>: ATIVO, TRAN ou REMA (padrão ATIVO)
       </div>
-      <div class="field-group" style="margin-bottom:16px">
-        <label class="field-label">Endereço</label>
-        <input type="text" id="cad-end" placeholder="Rua, número – Bairro">
-      </div>
-      <div class="field-group" style="margin-bottom:16px">
-        <label class="field-label">Condição Especial / Deficiência (se houver)</label>
-        <input type="text" id="cad-def" placeholder="Ex: Deficiência Intelectual, TEA, Baixa Visão…">
-      </div>
-      <button class="btn-submit" onclick="cadastrarAluno()">✅ Cadastrar Estudante</button>
+      <button class="btn-submit" id="btn-import-csv" onclick="atualizarAlunosCSV()">⬆ Atualizar estudantes pelo CSV</button>
+      <p id="cad-import-status" style="margin-top:12px;font-size:.78rem;color:var(--text-muted);display:none"></p>
     </div>
   </div>
   <div class="cad-list-wrap">
     <div class="cad-list-header">
-      <span>👥</span> Estudantes Cadastrados Manualmente
+      <span>👥</span> Estudantes cadastrados (extras / importados)
       <button onclick="exportarCadastros()" style="margin-left:auto;background:var(--navy);color:white;border:none;border-radius:6px;padding:5px 14px;font-size:.72rem;font-weight:600;cursor:pointer;">⬇ Exportar CSV</button>
     </div>
     <div id="cad-list-body" style="padding:16px 22px"></div>
@@ -1159,473 +1143,396 @@
 // DATA
 // ════════════════════════════════════════════════
 const ALUNOS = {
-  '6A': [
-    {num:'1',nome:'ALEF MELO CONCEIÇÃO'},
-    {num:'2',nome:'ANA MARIA JOÃO MANUEL'},
-    {num:'3',nome:'ANNA JÚLIA ROQUE DOS SANTOS'},
-    {num:'4',nome:'ARTHUR MANOEL SILVA DOS ANJOS'},
-    {num:'5',nome:'BRUNA PRADO FREITAS'},
-    {num:'6',nome:'CARLOS DANIEL CORREIA'},
-    {num:'7',nome:'CHRISTIAN MIGUEL TADDEI'},
-    {num:'8',nome:'CHRISTOFFER WILLIAM SILVA DO NASCIMENTO'},
-    {num:'9',nome:'DAVI VIEIRA FRANCO'},
-    {num:'10',nome:'EDUARDO KEVIN LINO FERREIRA'},
-    {num:'11',nome:'EMILLY BENTO SILVA'},
-    {num:'12',nome:'EMILLY SOFIA CARDOSO GOMES'},
-    {num:'13',nome:'JOÃO LUCCA LORENZON BORGES'},
-    {num:'14',nome:'JOVITO CONCEIÇÃO DOS SANTOS'},
-    {num:'15',nome:'JULIANA CARRATE DO NASCIMENTO'},
-    {num:'16',nome:'KAMILLY OLIVEIRA SOARES'},
-    {num:'17',nome:'LAURA MENDES SALES'},
-    {num:'18',nome:'LAURA VALENTINA LINO FERREIRA'},
-    {num:'19',nome:'LORENA MIRANDA ALVES DE SOUZA'},
-    {num:'20',nome:'LORENNA VALENTINA SILVA ALVES'},
-    {num:'21',nome:'LUCAS FERNANDES SARRIA DOS REIS'},
-    {num:'22',nome:'LUCCA RAPHAEL DE CASTRO SILVA'},
-    {num:'23',nome:'MARIA EDUARDA DA SILVA'},
-    {num:'24',nome:'MARIANNE VICTORIA FERREIRA DA CRUZ'},
-    {num:'25',nome:'MIGUEL LOPES DAMASCENO'},
-    {num:'26',nome:'NICOLAS MIGUEL CAVALCANTI OLIVEIRA'},
-    {num:'27',nome:'OCTAVIO LUIS FAGUNDES FIGUEIREDO ROBLES'},
-    {num:'28',nome:'PEDRO LOPES MARQUES CRESPO'},
-    {num:'29',nome:'RIHANNA MARTA SILVESTRE DE FRANCA'},
-    {num:'30',nome:'SIDNEY GOMES SANTANA'},
-    {num:'31',nome:'SOPHIA APARECIDA SANTOS DE ALMEIDA'},
-    {num:'32',nome:'TALITA BRITO SILVA'},
-    {num:'33',nome:'YARA LIDIA CARVALHO PEREIRA'},
-    {num:'34',nome:'JOÃO PEDRO PADILHA GUERESI'}
+  "6A":[
+    {"num": "1", "nome": "ALEF MELO CONCEIÇÃO", "ra": "000115723948", "ra_dig": "1", "ra_uf": "SP", "nasc": "2014-06-02", "nasc_fmt": "02/06/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA LEÔNIDAS MOREIRA - 34, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "2", "nome": "ANA MARIA JOÃO MANUEL", "ra": "000124536782", "ra_dig": "1", "ra_uf": "SP", "nasc": "2015-01-09", "nasc_fmt": "09/01/2015", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA LEÔNIDAS MOREIRA - 09, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "3", "nome": "ANNA JÚLIA ROQUE DOS SANTOS", "ra": "000116193992", "ra_dig": "1", "ra_uf": "SP", "nasc": "2014-09-25", "nasc_fmt": "25/09/2014", "educacenso": "169004959903", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA JOSEPHINA MARTINELLI DA SILVA - 100, VILA SANTA CATARINA - SAO PAULO - SP", "def": ""},
+    {"num": "4", "nome": "ARTHUR MANOEL SILVA DOS ANJOS", "ra": "000114914484", "ra_dig": "1", "ra_uf": "SP", "nasc": "2014-08-20", "nasc_fmt": "20/08/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "TRAVESSA GUIDO BIANCO - 50, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "5", "nome": "BRUNA PRADO FREITAS", "ra": "000120663152", "ra_dig": "1", "ra_uf": "SP", "nasc": "2014-11-25", "nasc_fmt": "25/11/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA DOUTOR UBALDO FRANCO CAIUBI - 336, VILA SÃO PAULO - SAO PAULO - SP", "def": ""},
+    {"num": "6", "nome": "CARLOS DANIEL CORREIA", "ra": "000122611834", "ra_dig": "3", "ra_uf": "SP", "nasc": "2014-03-18", "nasc_fmt": "18/03/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA WILSON RIBEIRO BONFIM - 94, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "7", "nome": "CHRISTIAN MIGUEL TADDEI", "ra": "000115413435", "ra_dig": "0", "ra_uf": "SP", "nasc": "2014-05-30", "nasc_fmt": "30/05/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "TRAVESSA GUIDO BIANCO - 136, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "8", "nome": "CHRISTOFFER WILLIAM SILVA DO NASCIMENTO", "ra": "000115728166", "ra_dig": "7", "ra_uf": "SP", "nasc": "2014-12-14", "nasc_fmt": "14/12/2014", "educacenso": "130524324513", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA VERÍSSIMO DE SOUZA - 10, VILA CONSTANÇA - SAO PAULO - SP", "def": ""},
+    {"num": "9", "nome": "DAVI VIEIRA FRANCO", "ra": "000115721715", "ra_dig": "1", "ra_uf": "SP", "nasc": "2014-08-23", "nasc_fmt": "23/08/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA LORENZO FAINA - 77, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "10", "nome": "EDUARDO KEVIN LINO FERREIRA", "ra": "000113537481", "ra_dig": "8", "ra_uf": "SP", "nasc": "2012-08-17", "nasc_fmt": "17/08/2012", "educacenso": "125237976661", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA DOUTOR GENTIL LEITE MARTINS - 698, VILA NOVA CALEDÔNIA - SAO PAULO - SP", "def": ""},
+    {"num": "11", "nome": "EMILLY BENTO SILVA", "ra": "000116135712", "ra_dig": "9", "ra_uf": "SP", "nasc": "2015-03-19", "nasc_fmt": "19/03/2015", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA SAMUEL ENDLER - 23, JARDIM ALVORADA (ZONA SUL) - SAO PAULO - SP", "def": ""},
+    {"num": "12", "nome": "EMILLY SOFIA CARDOSO GOMES", "ra": "000120722405", "ra_dig": "4", "ra_uf": "SP", "nasc": "2015-03-30", "nasc_fmt": "30/03/2015", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA EDUARDO AMIGO - 03, JARDIM UMUARAMA - SAO PAULO - SP", "def": ""},
+    {"num": "13", "nome": "JOÃO LUCCA LORENZON BORGES", "ra": "000122037131", "ra_dig": "2", "ra_uf": "SP", "nasc": "2014-12-16", "nasc_fmt": "16/12/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA OSMAR FREGONA - 109, JD PRUDENCIA - SAO PAULO - SP", "def": ""},
+    {"num": "14", "nome": "JOVITO CONCEIÇÃO DOS SANTOS", "ra": "000121352977", "ra_dig": "3", "ra_uf": "SP", "nasc": "2014-10-12", "nasc_fmt": "12/10/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA LEÔNIDAS MOREIRA - 10, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "15", "nome": "JULIANA CARRATE DO NASCIMENTO", "ra": "000121856471", "ra_dig": "4", "ra_uf": "SP", "nasc": "2015-03-10", "nasc_fmt": "10/03/2015", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA WILSON VALLIM - 83, VILA SÃO PAULO - SAO PAULO - SP", "def": ""},
+    {"num": "16", "nome": "KAMILLY OLIVEIRA SOARES", "ra": "000116128581", "ra_dig": "7", "ra_uf": "SP", "nasc": "2014-12-29", "nasc_fmt": "29/12/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA CAMARATINGA - 04, JARDIM ALVORADA (ZONA SUL) - SAO PAULO - SP", "def": ""},
+    {"num": "17", "nome": "LAURA VALENTINA LINO FERREIRA", "ra": "000115301422", "ra_dig": "1", "ra_uf": "SP", "nasc": "2015-03-01", "nasc_fmt": "01/03/2015", "educacenso": "", "mat_inicio": "13/03/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA DOUTOR GENTIL LEITE MARTINS - 698, VILA NOVA CALEDÔNIA - SAO PAULO - SP", "def": ""},
+    {"num": "18", "nome": "LORENA MIRANDA ALVES DE SOUZA", "ra": "000114423476", "ra_dig": "1", "ra_uf": "SP", "nasc": "2013-12-14", "nasc_fmt": "14/12/2013", "educacenso": "128242827892", "mat_inicio": "06/03/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA GUAIPEVA - 87, VILA SANTA CATARINA - SAO PAULO - SP", "def": ""},
+    {"num": "19", "nome": "LORENNA VALENTINA SILVA ALVES", "ra": "000115771165", "ra_dig": "0", "ra_uf": "SP", "nasc": "2014-04-02", "nasc_fmt": "02/04/2014", "educacenso": "", "mat_inicio": "25/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA DOUTOR LAURO PARENTE - 738, VILA DO CASTELO - SAO PAULO - SP", "def": ""},
+    {"num": "20", "nome": "LUCAS FERNANDES SARRIA DOS REIS", "ra": "000115808514", "ra_dig": "X", "ra_uf": "SP", "nasc": "2014-07-06", "nasc_fmt": "06/07/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA DARABI - 62, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "21", "nome": "LUCCA RAPHAEL DE CASTRO SILVA", "ra": "000115724717", "ra_dig": "9", "ra_uf": "SP", "nasc": "2014-03-12", "nasc_fmt": "12/03/2014", "educacenso": "130523619889", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA ANTÔNIO FOGAL - 18, JARDIM UMUARAMA - SAO PAULO - SP", "def": ""},
+    {"num": "22", "nome": "MARIA EDUARDA DA SILVA", "ra": "000115723910", "ra_dig": "9", "ra_uf": "SP", "nasc": "2014-06-20", "nasc_fmt": "20/06/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA SAMUEL ENDLER - 28, JARDIM ALVORADA (ZONA SUL) - SAO PAULO - SP", "def": ""},
+    {"num": "23", "nome": "MARIANNE VICTORIA FERREIRA DA CRUZ", "ra": "000115723982", "ra_dig": "1", "ra_uf": "SP", "nasc": "2014-08-27", "nasc_fmt": "27/08/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA LEÔNIDAS MOREIRA - 183, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "24", "nome": "MIGUEL LOPES DAMASCENO", "ra": "000120720531", "ra_dig": "X", "ra_uf": "SP", "nasc": "2014-12-18", "nasc_fmt": "18/12/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA WILSON RIBEIRO BONFIM - 94, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "25", "nome": "NICOLAS MIGUEL CAVALCANTI OLIVEIRA", "ra": "000116128626", "ra_dig": "3", "ra_uf": "SP", "nasc": "2015-02-18", "nasc_fmt": "18/02/2015", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA SAMUEL ENDLER - 28, JARDIM ALVORADA (ZONA SUL) - SAO PAULO - SP", "def": ""},
+    {"num": "26", "nome": "OCTAVIO LUIS FAGUNDES FIGUEIREDO ROBLES", "ra": "000115064828", "ra_dig": "4", "ra_uf": "SP", "nasc": "2013-08-24", "nasc_fmt": "24/08/2013", "educacenso": "128243201253", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA CHARLES DARWIN - 257, VILA SANTA CATARINA - SAO PAULO - SP", "def": ""},
+    {"num": "27", "nome": "PEDRO LOPES MARQUES CRESPO", "ra": "000116040445", "ra_dig": "8", "ra_uf": "SP", "nasc": "2014-06-07", "nasc_fmt": "07/06/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA DOUTOR DJALMA PINHEIRO FRANCO - 531, VILA SANTA CATARINA - SAO PAULO - SP", "def": ""},
+    {"num": "28", "nome": "RIHANNA MARTA SILVESTRE DE FRANCA", "ra": "000115317022", "ra_dig": "X", "ra_uf": "SP", "nasc": "2015-01-05", "nasc_fmt": "05/01/2015", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA PASCOAL MELANTÔNIO - 06, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "29", "nome": "SOPHIA APARECIDA SANTOS DE ALMEIDA", "ra": "000115723990", "ra_dig": "0", "ra_uf": "SP", "nasc": "2014-10-14", "nasc_fmt": "14/10/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA RAUL MARQUES MARINHO - 26, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "30", "nome": "TALITA BRITO SILVA", "ra": "000114708382", "ra_dig": "4", "ra_uf": "SP", "nasc": "2014-02-05", "nasc_fmt": "05/02/2014", "educacenso": "178669409673", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA CAMARATINGA - 41, JARDIM ALVORADA (ZONA SUL) - SAO PAULO - SP", "def": ""},
+    {"num": "31", "nome": "YARA LIDIA CARVALHO PEREIRA", "ra": "000116229003", "ra_dig": "1", "ra_uf": "SP", "nasc": "2015-01-22", "nasc_fmt": "22/01/2015", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA WILSON RIBEIRO BONFIM - 94, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "32", "nome": "JOÃO PEDRO PADILHA GUERESI", "ra": "000122323411", "ra_dig": "3", "ra_uf": "SP", "nasc": "2014-05-05", "nasc_fmt": "05/05/2014", "educacenso": "", "mat_inicio": "06/04/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA MARINA SADDI HAIDAR - 37, JARDIM UMUARAMA - SAO PAULO - SP", "def": ""},
+    {"num": "33", "nome": "LUCAS DOS SANTOS LEMES", "ra": "000120722411", "ra_dig": "X", "ra_uf": "SP", "nasc": "2014-04-11", "nasc_fmt": "11/04/2014", "educacenso": "178680957177", "mat_inicio": "07/07/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA OSÓRIO DE CASTRO - 301, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "34", "nome": "PAULO RICARDO BEZERRA DE OLIVEIRA", "ra": "000115852090", "ra_dig": "6", "ra_uf": "SP", "nasc": "2014-01-11", "nasc_fmt": "11/01/2014", "educacenso": "", "mat_inicio": "29/07/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA HERIBERTO SIMÕES DO VALLE - 109, JARDIM LOS ANGELES - SAO PAULO - SP", "def": ""},
+    {"num": "35", "nome": "MELISSA DOREA MONTEIRO", "ra": "000121379407", "ra_dig": "9", "ra_uf": "SP", "nasc": "2014-08-10", "nasc_fmt": "10/08/2014", "educacenso": "", "mat_inicio": "06/08/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA JOSÉ HOMERO ROXO - 121, CAMPININHA - SAO PAULO - SP", "def": ""},
   ],
-  '6B': [
-    {num:'1',nome:'ALICE ROCHA DO CARMO'},
-    {num:'2',nome:'ANA CLARA AUGUSTO DA SILVA'},
-    {num:'3',nome:'ANTHONY FURTADO IVO'},
-    {num:'4',nome:'ARTUR GOMES DA SILVA'},
-    {num:'5',nome:'BERNARDO CAVALCANTE DOS SANTOS'},
-    {num:'6',nome:'BRUNO DA SILVA BARROS'},
-    {num:'7',nome:'DAVYD LUIS NASCIMENTO VIEIRA'},
-    {num:'8',nome:'DIEGO LEONARDO DOS SANTOS MOREIRA'},
-    {num:'9',nome:'ELYSA CECILIA SANTOS DA SILVA'},
-    {num:'10',nome:'EMANUELLA LILIAN FRANÇA FREITAS'},
-    {num:'11',nome:'GABRIEL DA COSTA SILVA'},
-    {num:'12',nome:'GABRIEL JHONYS DE OLIVEIRA CLAUDINO'},
-    {num:'13',nome:'GEOVANNY GABRIEL DA SILVA'},
-    {num:'14',nome:'HADASSA THALIA DIAS OLIVEIRA MAGALHÃES'},
-    {num:'15',nome:'HELOYSA CAROLLINE BARBOSA DOS SANTOS'},
-    {num:'16',nome:'ISABELLA TOJAL TEIXEIRA DA SILVA'},
-    {num:'17',nome:'JOAQUIM REZENDE LOPES'},
-    {num:'18',nome:'LEANDRO DE SOUSA MARINHO'},
-    {num:'19',nome:'LORENNA MOREIRA DA SILVA'},
-    {num:'20',nome:'LUCAS HENRIQUE BARBOSA SILVA'},
-    {num:'21',nome:'LUCAS VIEIRA DE SOUSA'},
-    {num:'22',nome:'LUIZ RENATO SANTOS FERREIRA'},
-    {num:'23',nome:'MARCELA TADEU SALUSTRIANO GOMES DA SILVA'},
-    {num:'24',nome:'MARIA JÚLIA ARAUJO DOS SANTOS'},
-    {num:'25',nome:'MARIANA ESTERFANE RAMALHO SILVA'},
-    {num:'26',nome:'MIGUEL PEREIRA DOS SANTOS'},
-    {num:'27',nome:'MIGUEL SANTOS COSTA'},
-    {num:'28',nome:'MURILO RAVAGNANI'},
-    {num:'29',nome:'NÍCOLLAS GREGÓRIO RIBEIRO'},
-    {num:'30',nome:'RAFAEL SARMENTO BASTOS'},
-    {num:'31',nome:'RAPHAEL SALDANHA DE OLIVEIRA'},
-    {num:'32',nome:'RICHARD BARBOSA FREITAS'},
-    {num:'33',nome:'SOFIA DO CARMO BARBOSA'},
-    {num:'34',nome:'SOPHIA VALENTINA SANTANA DE OLIVEIRA'},
-    {num:'35',nome:'VICTOR OLIVEIRA DE LAIA'},
-    {num:'36',nome:'PEDRO HENRIQUE SANTOS REIMBERG'}
+  "6B":[
+    {"num": "1", "nome": "ALICE ROCHA DO CARMO", "ra": "000116144844", "ra_dig": "5", "ra_uf": "SP", "nasc": "2014-05-18", "nasc_fmt": "18/05/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA DOUTOR JOSÉ VICENTE DE BARROS FILHO - 40, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "2", "nome": "ANA CLARA AUGUSTO DA SILVA", "ra": "000115723882", "ra_dig": "8", "ra_uf": "SP", "nasc": "2014-05-06", "nasc_fmt": "06/05/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA SÍLVIO ESTEVES - 21, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "3", "nome": "ANTHONY FURTADO IVO", "ra": "000116109725", "ra_dig": "9", "ra_uf": "SP", "nasc": "2014-06-29", "nasc_fmt": "29/06/2014", "educacenso": "", "mat_inicio": "04/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "AVENIDA CUPECÊ - 1708, CIDADE ADEMAR - SAO PAULO - SP", "def": ""},
+    {"num": "4", "nome": "ARTUR GOMES DA SILVA", "ra": "000121186845", "ra_dig": "X", "ra_uf": "SP", "nasc": "2015-01-29", "nasc_fmt": "29/01/2015", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA LEÔNIDAS MOREIRA - 60, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "5", "nome": "BERNARDO CAVALCANTE DOS SANTOS", "ra": "000115722097", "ra_dig": "6", "ra_uf": "SP", "nasc": "2014-08-08", "nasc_fmt": "08/08/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA JOSÉ NEVES - 353, VILA SÃO PAULO - SAO PAULO - SP", "def": ""},
+    {"num": "6", "nome": "BRUNO DA SILVA BARROS", "ra": "000114707691", "ra_dig": "1", "ra_uf": "SP", "nasc": "2014-01-11", "nasc_fmt": "11/01/2014", "educacenso": "128242570247", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA PEDRO SABINO DE BRITO - 115, JARDIM LOS ANGELES - SAO PAULO - SP", "def": "INTELECTUAL"},
+    {"num": "7", "nome": "DAVYD LUIS NASCIMENTO VIEIRA", "ra": "000115294005", "ra_dig": "3", "ra_uf": "SP", "nasc": "2014-07-25", "nasc_fmt": "25/07/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA DO MAR - 130, VILA SÃO PAULO - SAO PAULO - SP", "def": ""},
+    {"num": "8", "nome": "DIEGO LEONARDO DOS SANTOS MOREIRA", "ra": "000115323555", "ra_dig": "9", "ra_uf": "SP", "nasc": "2015-01-18", "nasc_fmt": "18/01/2015", "educacenso": "130524035830", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA RAUL MARQUES MARINHO - 520, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "9", "nome": "ELYSA CECILIA SANTOS DA SILVA", "ra": "000114411357", "ra_dig": "X", "ra_uf": "SP", "nasc": "2014-07-23", "nasc_fmt": "23/07/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA FRANCISCO LOPES PINTO - 282, JARDIM PRUDÊNCIA - SAO PAULO - SP", "def": ""},
+    {"num": "10", "nome": "EMANUELLA LILIAN FRANÇA FREITAS", "ra": "000115607982", "ra_dig": "2", "ra_uf": "SP", "nasc": "2014-07-16", "nasc_fmt": "16/07/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA SÍLVIO ESTEVES - 204, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "11", "nome": "GABRIEL DA COSTA SILVA", "ra": "000116175702", "ra_dig": "8", "ra_uf": "SP", "nasc": "2014-10-21", "nasc_fmt": "21/10/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA ANTÔNIO FOGAL - 57, JARDIM UMUARAMA - SAO PAULO - SP", "def": ""},
+    {"num": "12", "nome": "GABRIEL JHONYS DE OLIVEIRA CLAUDINO", "ra": "000115840369", "ra_dig": "0", "ra_uf": "SP", "nasc": "2014-04-15", "nasc_fmt": "15/04/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA OCTÁVIO TEIXEIRA MENDES SOBRINHO - 480, VILA SANTA CATARINA - SAO PAULO - SP", "def": ""},
+    {"num": "13", "nome": "GEOVANNY GABRIEL DA SILVA", "ra": "000120722256", "ra_dig": "2", "ra_uf": "SP", "nasc": "2014-06-09", "nasc_fmt": "09/06/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA JOSÉ ANTÔNIO MARTINS - 313, VILA SÃO PAULO - SAO PAULO - SP", "def": ""},
+    {"num": "14", "nome": "HADASSA THALIA DIAS OLIVEIRA MAGALHÃES", "ra": "000116272973", "ra_dig": "9", "ra_uf": "SP", "nasc": "2014-09-25", "nasc_fmt": "25/09/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "AVENIDA MASCOTE - 787, VILA MASCOTE - SAO PAULO - SP", "def": ""},
+    {"num": "15", "nome": "HELOYSA CAROLLINE BARBOSA DOS SANTOS", "ra": "000116213028", "ra_dig": "3", "ra_uf": "SP", "nasc": "2014-07-24", "nasc_fmt": "24/07/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA ANTÔNIO FOGAL - 111, JARDIM UMUARAMA - SAO PAULO - SP", "def": ""},
+    {"num": "16", "nome": "ISABELLA TOJAL TEIXEIRA DA SILVA", "ra": "000115724693", "ra_dig": "X", "ra_uf": "SP", "nasc": "2014-08-14", "nasc_fmt": "14/08/2014", "educacenso": "130523622081", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA OSÓRIO DE CASTRO - 140, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "17", "nome": "JOAQUIM REZENDE LOPES", "ra": "000116177668", "ra_dig": "0", "ra_uf": "SP", "nasc": "2014-06-26", "nasc_fmt": "26/06/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "AVENIDA VEREADOR JOÃO DE LUCA - 1790, JARDIM PRUDÊNCIA - SAO PAULO - SP", "def": ""},
+    {"num": "18", "nome": "LEANDRO DE SOUSA MARINHO", "ra": "000115728135", "ra_dig": "7", "ra_uf": "SP", "nasc": "2014-08-05", "nasc_fmt": "05/08/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA LUCINDO DOS PASSOS - 110, JARDIM PRUDÊNCIA - SAO PAULO - SP", "def": ""},
+    {"num": "19", "nome": "LORENNA MOREIRA DA SILVA", "ra": "000115377273", "ra_dig": "5", "ra_uf": "SP", "nasc": "2014-04-08", "nasc_fmt": "08/04/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA HERIBERTO SIMÕES DO VALLE - 109, JARDIM LOS ANGELES - SAO PAULO - SP", "def": ""},
+    {"num": "20", "nome": "LUCAS HENRIQUE BARBOSA SILVA", "ra": "000116766447", "ra_dig": "4", "ra_uf": "SP", "nasc": "2014-10-31", "nasc_fmt": "31/10/2014", "educacenso": "144801086615", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA SEBASTIÃO ANDRADE BONANI - 493, JARDIM PRUDÊNCIA - SAO PAULO - SP", "def": ""},
+    {"num": "21", "nome": "LUCAS VIEIRA DE SOUSA", "ra": "000114710239", "ra_dig": "9", "ra_uf": "SP", "nasc": "2014-02-04", "nasc_fmt": "04/02/2014", "educacenso": "128242572452", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "ALCIDES MACIEL - 33, VILA SAO PAULO - SAO PAULO - SP", "def": ""},
+    {"num": "22", "nome": "LUIZ RENATO SANTOS FERREIRA", "ra": "000115723892", "ra_dig": "0", "ra_uf": "SP", "nasc": "2014-06-10", "nasc_fmt": "10/06/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA PEDRO SABINO DE BRITO - 139, JARDIM LOS ANGELES - SAO PAULO - SP", "def": ""},
+    {"num": "23", "nome": "MARCELA TADEU SALUSTRIANO GOMES DA SILVA", "ra": "000120722263", "ra_dig": "X", "ra_uf": "SP", "nasc": "2014-05-12", "nasc_fmt": "12/05/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA PEDRO SABINO DE BRITO - 57, JARDIM LOS ANGELES - SAO PAULO - SP", "def": ""},
+    {"num": "24", "nome": "MARIA JÚLIA ARAUJO DOS SANTOS", "ra": "000121850135", "ra_dig": "2", "ra_uf": "SP", "nasc": "2014-08-06", "nasc_fmt": "06/08/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA DO JORNAL DO COMÉRCIO - 05, AMERICANÓPOLIS - SAO PAULO - SP", "def": ""},
+    {"num": "25", "nome": "MARIANA ESTERFANE RAMALHO SILVA", "ra": "000114700418", "ra_dig": "3", "ra_uf": "SP", "nasc": "2014-06-17", "nasc_fmt": "17/06/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA LANNES - 56, VILA MASCOTE - SAO PAULO - SP", "def": ""},
+    {"num": "26", "nome": "MIGUEL PEREIRA DOS SANTOS", "ra": "000116213531", "ra_dig": "1", "ra_uf": "SP", "nasc": "2014-10-30", "nasc_fmt": "30/10/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA SATÉLITE DIONÉIA - 550, JARDIM CASA GRANDE - SAO PAULO - SP", "def": ""},
+    {"num": "27", "nome": "MURILO RAVAGNANI", "ra": "000120666003", "ra_dig": "X", "ra_uf": "SP", "nasc": "2015-03-08", "nasc_fmt": "08/03/2015", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA MADRE EMILIE DE VILLENEUVE - 152, VILA SANTA CATARINA - SAO PAULO - SP", "def": ""},
+    {"num": "28", "nome": "NÍCOLLAS GREGÓRIO RIBEIRO", "ra": "000120681982", "ra_dig": "0", "ra_uf": "SP", "nasc": "2014-04-04", "nasc_fmt": "04/04/2014", "educacenso": "180585555418", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA PENEDO DA FAZENDA - 28, JARDIM ALVORADA - SAO PAULO - SP", "def": ""},
+    {"num": "29", "nome": "RAFAEL SARMENTO BASTOS", "ra": "000120222089", "ra_dig": "7", "ra_uf": "SP", "nasc": "2015-01-12", "nasc_fmt": "12/01/2015", "educacenso": "130324687604", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA PASCOAL MELANTÔNIO - 329, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "30", "nome": "RAPHAEL SALDANHA DE OLIVEIRA", "ra": "000114544521", "ra_dig": "4", "ra_uf": "SP", "nasc": "2013-10-31", "nasc_fmt": "31/10/2013", "educacenso": "128205362202", "mat_inicio": "19/03/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA FRANCISCO LOPES PINTO - 101, JARDIM PRUDÊNCIA - SAO PAULO - SP", "def": ""},
+    {"num": "31", "nome": "SOFIA DO CARMO BARBOSA", "ra": "000116182352", "ra_dig": "9", "ra_uf": "SP", "nasc": "2015-03-17", "nasc_fmt": "17/03/2015", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA ANTÔNIO FOGAL - 34, JARDIM UMUARAMA - SAO PAULO - SP", "def": ""},
+    {"num": "32", "nome": "SOPHIA VALENTINA SANTANA DE OLIVEIRA", "ra": "000115273029", "ra_dig": "0", "ra_uf": "SP", "nasc": "2014-05-19", "nasc_fmt": "19/05/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA JOSÉ ANTÔNIO MARTINS - 317, VILA SÃO PAULO - SAO PAULO - SP", "def": ""},
+    {"num": "33", "nome": "VICTOR OLIVEIRA DE LAIA", "ra": "000115723924", "ra_dig": "9", "ra_uf": "SP", "nasc": "2014-06-15", "nasc_fmt": "15/06/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA EDUARDO AMIGO - 318, JARDIM UMUARAMA - SAO PAULO - SP", "def": "INTELECTUAL, AUTISTA INFANTIL"},
+    {"num": "34", "nome": "PEDRO HENRIQUE SANTOS REIMBERG", "ra": "000120722392", "ra_dig": "X", "ra_uf": "SP", "nasc": "2015-01-04", "nasc_fmt": "04/01/2015", "educacenso": "", "mat_inicio": "13/04/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA WILSON RIBEIRO BONFIM - 94, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "35", "nome": "ENZO GABRIEL CASTRO DA COSTA", "ra": "000114396743", "ra_dig": "4", "ra_uf": "SP", "nasc": "2013-05-14", "nasc_fmt": "14/05/2013", "educacenso": "128242814804", "mat_inicio": "04/08/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA ANTÔNIO FOGAL - 28, JARDIM UMUARAMA - SAO PAULO - SP", "def": ""},
   ],
-  '6C': [
-    {num:'1',nome:'ANA BEATRIZ DE ALMEIDA'},
-    {num:'2',nome:'ANA LUIZA VIEIRA DA SILVA'},
-    {num:'3',nome:'ARTHUR ARAUJO SANTOS'},
-    {num:'4',nome:'ARTHUR SANTOS PIMENTEL'},
-    {num:'5',nome:'BIANCA SILVA SANTOS'},
-    {num:'6',nome:'DAVI LUCCA CARDOSO SIMÕES'},
-    {num:'7',nome:'DAVI LUCCA JESUS DOS SANTOS'},
-    {num:'8',nome:'DAVID LUCCA AGUIAR CARVALHO'},
-    {num:'9',nome:'DIOGO COSTA LOPES'},
-    {num:'10',nome:'EDUARDO ASAPHE BARROS DE LIMA'},
-    {num:'11',nome:'GABRIEL DOS SANTOS COSTA'},
-    {num:'12',nome:'GUILHERME DE SOUZA SILVA'},
-    {num:'13',nome:'HELENA MENEZES DE OLIVEIRA BATISTA'},
-    {num:'14',nome:'IARA MAESTRELO PRADO'},
-    {num:'15',nome:'ISABELLA AMARAL MARIANO'},
-    {num:'16',nome:'JHONATAN MIGUEL BISPO SILVA'},
-    {num:'17',nome:'JOSÉ ARTHUR DOS SANTOS PRUDENTE'},
-    {num:'18',nome:'JOSÉ LUIZ SOUZA DO NASCIMENTO'},
-    {num:'19',nome:'KAROLINY VICTORIA SANTOS CABRAL'},
-    {num:'20',nome:'LARA ESTABEL AMORIM'},
-    {num:'21',nome:'LAVÍNIA SOARES DA SILVA'},
-    {num:'22',nome:'MANUELLA PEREIRA REIS'},
-    {num:'23',nome:'MIGUEL AUGUSTO AMAYA'},
-    {num:'24',nome:'MIGUEL DA SILVA SANTOS'},
-    {num:'25',nome:'MILENE LIRA MACIEL'},
-    {num:'26',nome:'MIRIAN ESTRELA DE OLIVEIRA'},
-    {num:'27',nome:'NICOLLY OLIVEIRA BARBOSA'},
-    {num:'28',nome:'OHANA MARINHO DOS SANTOS'},
-    {num:'29',nome:'RAYLA MARIANA VIANA VERISSIMO'},
-    {num:'30',nome:'RYAN RIBEIRO DA SILVA'},
-    {num:'31',nome:'SOFIA DOS ANJOS SANTOS'},
-    {num:'32',nome:'THALLES MIGUEL MACIEL DOS SANTOS'},
-    {num:'33',nome:'THIAGO SANTOS SENA DE JESUS'},
-    {num:'34',nome:'VITOR GABRIEL DA SILVA COSTA'},
-    {num:'35',nome:'YASMIN MACIEL DEMUTH LOPEZ'},
-    {num:'36',nome:'YGOR GABRIEL GUIMARÃES VILA NOVA'},
-    {num:'37',nome:'ANNE VITORIA GUIMARÃES OLIVEIRA'}
+  "6C":[
+    {"num": "1", "nome": "ANA BEATRIZ DE ALMEIDA", "ra": "000115643323", "ra_dig": "X", "ra_uf": "SP", "nasc": "2014-08-26", "nasc_fmt": "26/08/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA JOÃO GOMES BATISTA - 1047, JARDIM CIDÁLIA - SAO PAULO - SP", "def": ""},
+    {"num": "2", "nome": "ANA LUIZA VIEIRA DA SILVA", "ra": "000120690438", "ra_dig": "0", "ra_uf": "SP", "nasc": "2014-06-19", "nasc_fmt": "19/06/2014", "educacenso": "178669702893", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "AVENIDA SARGENTO GERALDO SANT'ANA - 1100, JARDIM TAQUARAL - SAO PAULO - SP", "def": ""},
+    {"num": "3", "nome": "ARTHUR ARAUJO SANTOS", "ra": "000115724013", "ra_dig": "6", "ra_uf": "SP", "nasc": "2014-09-28", "nasc_fmt": "28/09/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA JOSÉ ANTÔNIO MARTINS - 251, VILA SÃO PAULO - SAO PAULO - SP", "def": ""},
+    {"num": "4", "nome": "ARTHUR SANTOS PIMENTEL", "ra": "000115723944", "ra_dig": "4", "ra_uf": "SP", "nasc": "2014-04-01", "nasc_fmt": "01/04/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA JÚLIO ANDRÉ CORREIA - 119, JARDIM UMUARAMA - SAO PAULO - SP", "def": ""},
+    {"num": "5", "nome": "BIANCA SILVA SANTOS", "ra": "000120666102", "ra_dig": "1", "ra_uf": "SP", "nasc": "2014-04-28", "nasc_fmt": "28/04/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA CONTOS GAUCHESCOS - 1000, VILA SANTA CATARINA - SAO PAULO - SP", "def": ""},
+    {"num": "6", "nome": "DAVI LUCCA CARDOSO SIMÕES", "ra": "000120669515", "ra_dig": "8", "ra_uf": "SP", "nasc": "2014-12-13", "nasc_fmt": "13/12/2014", "educacenso": "178659291106", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "AVENIDA VEREADOR JOÃO DE LUCA - 1790, JARDIM PRUDENCIA - SAO PAULO - SP", "def": ""},
+    {"num": "7", "nome": "DAVI LUCCA JESUS DOS SANTOS", "ra": "000116448164", "ra_dig": "2", "ra_uf": "SP", "nasc": "2015-03-17", "nasc_fmt": "17/03/2015", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA BASTOS TIGRE - 201, JARDIM SAO JORGE - SAO PAULO - SP", "def": "INTELECTUAL, AUTISTA INFANTIL"},
+    {"num": "8", "nome": "DAVID LUCCA AGUIAR CARVALHO", "ra": "000116193040", "ra_dig": "1", "ra_uf": "SP", "nasc": "2014-11-25", "nasc_fmt": "25/11/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "AVENIDA CUPECÊ - 1877, CIDADE ADEMAR - SAO PAULO - SP", "def": ""},
+    {"num": "9", "nome": "DIOGO COSTA LOPES", "ra": "000115350360", "ra_dig": "8", "ra_uf": "SP", "nasc": "2014-08-20", "nasc_fmt": "20/08/2014", "educacenso": "130523835077", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA LORENZO FAINA - 49, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "10", "nome": "EDUARDO ASAPHE BARROS DE LIMA", "ra": "000115723044", "ra_dig": "1", "ra_uf": "SP", "nasc": "2014-12-08", "nasc_fmt": "08/12/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA CARLO CARRA - 498, VILA SANTA CATARINA - SAO PAULO - SP", "def": ""},
+    {"num": "11", "nome": "GABRIEL DOS SANTOS COSTA", "ra": "000116618781", "ra_dig": "0", "ra_uf": "SP", "nasc": "2015-03-29", "nasc_fmt": "29/03/2015", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA JUCA DE AZEVEDO - 130, JARDIM ALVORADA (ZONA SUL) - SAO PAULO - SP", "def": ""},
+    {"num": "12", "nome": "GUILHERME DE SOUZA SILVA", "ra": "000115303998", "ra_dig": "9", "ra_uf": "SP", "nasc": "2014-04-28", "nasc_fmt": "28/04/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA GLYCÉRIO ALMEIDA MACIEL - 253, JARDIM ITAPURA - SAO PAULO - SP", "def": ""},
+    {"num": "13", "nome": "HELENA MENEZES DE OLIVEIRA BATISTA", "ra": "000115319987", "ra_dig": "7", "ra_uf": "SP", "nasc": "2014-12-12", "nasc_fmt": "12/12/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA AMADOR LOURENÇO - 202, VILA CONSTANÇA - SAO PAULO - SP", "def": ""},
+    {"num": "14", "nome": "IARA MAESTRELO PRADO", "ra": "000115316768", "ra_dig": "2", "ra_uf": "SP", "nasc": "2014-04-12", "nasc_fmt": "12/04/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA EDUARDO AMIGO - 207, JARDIM UMUARAMA - SAO PAULO - SP", "def": ""},
+    {"num": "15", "nome": "ISABELLA AMARAL MARIANO", "ra": "000115328373", "ra_dig": "6", "ra_uf": "SP", "nasc": "2014-12-06", "nasc_fmt": "06/12/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA VITANTONIO DE ABRIL - 256, JD ALZIRA - SAO PAULO - SP", "def": ""},
+    {"num": "16", "nome": "JHONATAN MIGUEL BISPO SILVA", "ra": "000114697201", "ra_dig": "5", "ra_uf": "SP", "nasc": "2014-04-03", "nasc_fmt": "03/04/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA PASCOAL MELANTÔNIO - 10, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "17", "nome": "JOSÉ ARTHUR DOS SANTOS PRUDENTE", "ra": "000121234108", "ra_dig": "9", "ra_uf": "SP", "nasc": "2015-06-08", "nasc_fmt": "08/06/2015", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA DIONISIO LAVRANGA - 90, JD ORLY - SAO PAULO - SP", "def": ""},
+    {"num": "18", "nome": "JOSÉ LUIZ SOUZA DO NASCIMENTO", "ra": "000116692229", "ra_dig": "7", "ra_uf": "SP", "nasc": "2015-01-15", "nasc_fmt": "15/01/2015", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA RAUL MARQUES MARINHO - 325, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "19", "nome": "KAROLINY VICTORIA SANTOS CABRAL", "ra": "000115723919", "ra_dig": "5", "ra_uf": "SP", "nasc": "2014-06-13", "nasc_fmt": "13/06/2014", "educacenso": "", "mat_inicio": "17/03/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA PEDRO SABINO DE BRITO - 163, JARDIM LOS ANGELES - SAO PAULO - SP", "def": ""},
+    {"num": "20", "nome": "LARA ESTABEL AMORIM", "ra": "000115719624", "ra_dig": "X", "ra_uf": "SP", "nasc": "2014-07-04", "nasc_fmt": "04/07/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "AVENIDA PIO XI - 36, VILA MISSIONÁRIA - SAO PAULO - SP", "def": ""},
+    {"num": "21", "nome": "LAVÍNIA SOARES DA SILVA", "ra": "000115212959", "ra_dig": "4", "ra_uf": "SP", "nasc": "2014-08-02", "nasc_fmt": "02/08/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "AVENIDA PIO XI - 32, VILA MISSIONÁRIA - SAO PAULO - SP", "def": ""},
+    {"num": "22", "nome": "MANUELLA PEREIRA REIS", "ra": "000115723469", "ra_dig": "0", "ra_uf": "SP", "nasc": "2014-09-06", "nasc_fmt": "06/09/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA SEBASTIÃO ANDRADE BONANI - 430, JARDIM PRUDÊNCIA - SAO PAULO - SP", "def": ""},
+    {"num": "23", "nome": "MIGUEL AUGUSTO AMAYA", "ra": "000115723979", "ra_dig": "1", "ra_uf": "SP", "nasc": "2014-08-06", "nasc_fmt": "06/08/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA AMADOR LOURENÇO - 16, VILA CONSTANÇA - SAO PAULO - SP", "def": ""},
+    {"num": "24", "nome": "MIGUEL DA SILVA SANTOS", "ra": "000116122674", "ra_dig": "6", "ra_uf": "SP", "nasc": "2015-01-03", "nasc_fmt": "03/01/2015", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA JOÃO GASPAR SIMÕES - 343, JARDIM MIRIAM - SAO PAULO - SP", "def": ""},
+    {"num": "25", "nome": "MILENE LIRA MACIEL", "ra": "000120224205", "ra_dig": "4", "ra_uf": "SP", "nasc": "2014-12-29", "nasc_fmt": "29/12/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA DAS TAQUARAS - 326, VILA SANTA CATARINA - SAO PAULO - SP", "def": ""},
+    {"num": "26", "nome": "MIRIAN ESTRELA DE OLIVEIRA", "ra": "000122237889", "ra_dig": "9", "ra_uf": "SP", "nasc": "2015-03-04", "nasc_fmt": "04/03/2015", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA ELISEU BORGES - 307, MORRO GRANDE - SAO PAULO - SP", "def": ""},
+    {"num": "27", "nome": "NICOLLY OLIVEIRA BARBOSA", "ra": "000115455263", "ra_dig": "9", "ra_uf": "SP", "nasc": "2014-11-14", "nasc_fmt": "14/11/2014", "educacenso": "130523622324", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA DOS CAFEZAIS - 613, VILA SANTA CATARINA - SAO PAULO - SP", "def": ""},
+    {"num": "28", "nome": "OHANA MARINHO DOS SANTOS", "ra": "000116285574", "ra_dig": "5", "ra_uf": "SP", "nasc": "2014-12-04", "nasc_fmt": "04/12/2014", "educacenso": "144853734790", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA FRANZ ERKEL - 189, JARDIM ORLY - SAO PAULO - SP", "def": ""},
+    {"num": "29", "nome": "RAYLA MARIANA VIANA VERISSIMO", "ra": "000121449662", "ra_dig": "3", "ra_uf": "SP", "nasc": "2014-06-06", "nasc_fmt": "06/06/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA JACINTO VIEIRA - 117, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "30", "nome": "RYAN RIBEIRO DA SILVA", "ra": "000115724001", "ra_dig": "X", "ra_uf": "SP", "nasc": "2015-03-29", "nasc_fmt": "29/03/2015", "educacenso": "", "mat_inicio": "04/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA HONORINDA JOSEFA DA SILVA - 195, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "31", "nome": "SOFIA DOS ANJOS SANTOS", "ra": "000115310119", "ra_dig": "1", "ra_uf": "SP", "nasc": "2014-12-09", "nasc_fmt": "09/12/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA ANTÔNIO GIL - 240, JARDIM ALZIRA - SAO PAULO - SP", "def": ""},
+    {"num": "32", "nome": "THALLES MIGUEL MACIEL DOS SANTOS", "ra": "000115568116", "ra_dig": "2", "ra_uf": "SP", "nasc": "2014-08-04", "nasc_fmt": "04/08/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA CÉU TROPICAL - 190, CONJ RES JD CANAÃ - SAO PAULO - SP", "def": ""},
+    {"num": "33", "nome": "THIAGO SANTOS SENA DE JESUS", "ra": "000125241118", "ra_dig": "2", "ra_uf": "SP", "nasc": "2013-02-28", "nasc_fmt": "28/02/2013", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA PASCOAL MELANTÔNIO - 06, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "34", "nome": "VITOR GABRIEL DA SILVA COSTA", "ra": "000115317026", "ra_dig": "7", "ra_uf": "SP", "nasc": "2014-12-13", "nasc_fmt": "13/12/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA JOSÉ ANTÔNIO MARTINS - 245, VILA SÃO PAULO - SAO PAULO - SP", "def": ""},
+    {"num": "35", "nome": "YASMIN MACIEL DEMUTH LOPEZ", "ra": "000120456615", "ra_dig": "X", "ra_uf": "SP", "nasc": "2014-05-16", "nasc_fmt": "16/05/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "AVENIDA YERVANT KISSAJIKIAN - 610, VILA CONSTANÇA - SAO PAULO - SP", "def": ""},
+    {"num": "36", "nome": "YGOR GABRIEL GUIMARÃES VILA NOVA", "ra": "000116522742", "ra_dig": "3", "ra_uf": "SP", "nasc": "2015-07-21", "nasc_fmt": "21/07/2015", "educacenso": "151193775565", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA GUSTAVO DA SILVEIRA - 320, VILA SANTA CATARINA - SAO PAULO - SP", "def": ""},
+    {"num": "37", "nome": "ANNE VITORIA GUIMARÃES OLIVEIRA", "ra": "000116219915", "ra_dig": "5", "ra_uf": "SP", "nasc": "2014-11-27", "nasc_fmt": "27/11/2014", "educacenso": "", "mat_inicio": "17/04/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA JOÃO GOMES BATISTA - 1100, JARDIM CIDÁLIA - SAO PAULO - SP", "def": ""},
   ],
-  '7A': [
-    {num:'1',nome:'ANNA CLARA GONCALVES DE BARROS'},
-    {num:'2',nome:'ARTHUR COSTA DA CONCEIÇÃO'},
-    {num:'3',nome:'DAVI FABIANO DE OLIVEIRA'},
-    {num:'4',nome:'DAVI MOURA MARTINS DE FARIA'},
-    {num:'5',nome:'ELOAH DIAS COELHO'},
-    {num:'6',nome:'EMILLY ALVES LIMA'},
-    {num:'7',nome:'ENZO PARESCHI DE LIMA PONCE LEÃO'},
-    {num:'8',nome:'ERICK YUSUKE SANTANA LOPES'},
-    {num:'9',nome:'FELIPE NUNES ASSMANN'},
-    {num:'10',nome:'GUILHERME RAFAEL AQUINO DE BARROS'},
-    {num:'11',nome:'ISABELLY SOBRAL VIEIRA'},
-    {num:'12',nome:'JOABISON WENDEL MARQUES SILVA'},
-    {num:'13',nome:'JOÃO PEDRO BONFIM MACEDO'},
-    {num:'14',nome:'JOSÉ RUAN APOLINARIO SERETTI'},
-    {num:'15',nome:'JULIANA DARK SOUZA DO NASCIMENTO'},
-    {num:'16',nome:'KETYLLIN MELISSA DE SOUZA SANTOS'},
-    {num:'17',nome:'LÍVIA MORENO DE PAULA'},
-    {num:'18',nome:'LORENA BATISTA SOARES DIAS'},
-    {num:'19',nome:'LUIZ MIGUEL NUNES GARCIA'},
-    {num:'20',nome:'MANUELLA OLIVEIRA PUGLESI'},
-    {num:'21',nome:'MARIA EDUARDA LEMOS SIQUEIRA'},
-    {num:'22',nome:'MARIA EDUARDA PEREIRA DE ANANIAS'},
-    {num:'23',nome:'MARIANA MACEDO DOS SANTOS'},
-    {num:'24',nome:'MIGUEL KUSTOVICH STRAIOTO LABIAPARI'},
-    {num:'25',nome:'NICOLLY RODRIGUES NUNES'},
-    {num:'26',nome:'OLÍVIA ALMEIDA DEMARCHE RIBEIRO'},
-    {num:'27',nome:'PEDRO ENZO VENCESLAU CRIZANTE'},
-    {num:'28',nome:'PEDRO MIGUEL COSTA BRAGA ARAUJO'},
-    {num:'29',nome:'RAFAELA MORENO DE PAULA'},
-    {num:'30',nome:'SARAH CRISTINA ALMEIDA DE ASSIS'},
-    {num:'31',nome:'SOFIA SOUZA DE OLIVEIRA'},
-    {num:'32',nome:'SOPHIA ABRANTES DE SOUSA'},
-    {num:'33',nome:'SOPHIA KAROLINY VITALINO DE OLIVEIRA'},
-    {num:'34',nome:'SOPHIA SANTOS SIMÃO'},
-    {num:'35',nome:'THÉO MARINHO CUBO'},
-    {num:'36',nome:'VALENTINA COSTA E SILVA CARDOSO'},
-    {num:'37',nome:'ZACK NASCIMENTO MANFREDI'},
-    {num:'38',nome:'JOAQUIM SILVA CARNEIRO RABELO'},
-    {num:'39',nome:'WILDERLYS VICTORIA MENDEZ MEDINA'}
+  "7A":[
+    {"num": "1", "nome": "ALICE ALVES DE BRITO MANSO", "ra": "000124220557", "ra_dig": "3", "ra_uf": "SP", "nasc": "2012-06-14", "nasc_fmt": "14/06/2012", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA ROQUE GIANGRANDE FILHO - 130, JARDIM ITAPEVA - SAO PAULO - SP", "def": ""},
+    {"num": "2", "nome": "ANDERSON BARBOSA DOS SANTOS JUNIOR", "ra": "000114612613", "ra_dig": "X", "ra_uf": "SP", "nasc": "2013-05-18", "nasc_fmt": "18/05/2013", "educacenso": "128242953090", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA DJALMA CORREIA - 14A, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "3", "nome": "ANDRÉ BORGES FERREIRA", "ra": "000114700184", "ra_dig": "4", "ra_uf": "SP", "nasc": "2014-03-17", "nasc_fmt": "17/03/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA PEDRO SABINO DE BRITO - 115, JARDIM LOS ANGELES - SAO PAULO - SP", "def": ""},
+    {"num": "4", "nome": "ANDRYS DE ANDRADE SANTOS", "ra": "000115460982", "ra_dig": "0", "ra_uf": "SP", "nasc": "2013-06-04", "nasc_fmt": "04/06/2013", "educacenso": "130523806646", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA SAMUEL ENDLER - 27, JARDIM ALVORADA ZS - SAO PAULO - SP", "def": ""},
+    {"num": "5", "nome": "ANNA VITÓRIA AQUINO SANTOS", "ra": "000114430354", "ra_dig": "0", "ra_uf": "SP", "nasc": "2014-01-05", "nasc_fmt": "05/01/2014", "educacenso": "128242570166", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "PEDRO SABINO DE BRITO - 119, JARDIM LOS ANGELES - SAO PAULO - SP", "def": ""},
+    {"num": "6", "nome": "ARTHUR DE OLIVEIRA BRAGA", "ra": "000114434995", "ra_dig": "3", "ra_uf": "SP", "nasc": "2013-08-10", "nasc_fmt": "10/08/2013", "educacenso": "128257917507", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "AVENIDA CUPECÊ - 1877, CIDADE ADEMAR - SAO PAULO - SP", "def": ""},
+    {"num": "7", "nome": "BEATRIZ LORENA FAGUNDES DE ARAUJO", "ra": "000122716889", "ra_dig": "5", "ra_uf": "SP", "nasc": "2013-06-10", "nasc_fmt": "10/06/2013", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA RUBEM DE SOUZA - 438, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "8", "nome": "BERNARDO HENRIQUE DA COSTA PAULA", "ra": "000114710657", "ra_dig": "5", "ra_uf": "SP", "nasc": "2013-12-25", "nasc_fmt": "25/12/2013", "educacenso": "128242951984", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "ANTONIO FOGAL - 15, JARDIM UMUARAMA - SAO PAULO - SP", "def": ""},
+    {"num": "9", "nome": "BRENO JOSÉ DOS SANTOS BENTO", "ra": "000114694779", "ra_dig": "3", "ra_uf": "SP", "nasc": "2013-10-22", "nasc_fmt": "22/10/2013", "educacenso": "128242568269", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA SAMUEL ENDLER - 59, JARDIM ALVORADA ZS - SAO PAULO - SP", "def": ""},
+    {"num": "10", "nome": "BRYAN SILVA PEREIRA", "ra": "000116125553", "ra_dig": "9", "ra_uf": "SP", "nasc": "2014-03-02", "nasc_fmt": "02/03/2014", "educacenso": "169005396961", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA CARLOS FACCHINA - 571, AMERICANÓPOLIS - SAO PAULO - SP", "def": ""},
+    {"num": "11", "nome": "DESIRÈ FERNANDA DELOGO DE OLIVEIRA", "ra": "000115779222", "ra_dig": "4", "ra_uf": "SP", "nasc": "2014-01-28", "nasc_fmt": "28/01/2014", "educacenso": "130540380252", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "AVENIDA WASHINGTON LUÍS - 2920, SANTO AMARO - SAO PAULO - SP", "def": ""},
+    {"num": "12", "nome": "ENZO GABRIEL SILVA DE SOUZA", "ra": "000114710237", "ra_dig": "5", "ra_uf": "SP", "nasc": "2014-02-15", "nasc_fmt": "15/02/2014", "educacenso": "128242571561", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA LUCINDO DOS PASSOS - 65, JARDIM PRUDÊNCIA - SAO PAULO - SP", "def": ""},
+    {"num": "13", "nome": "FELIPE SANTOS SOUZA DA MOTA", "ra": "000114697173", "ra_dig": "4", "ra_uf": "SP", "nasc": "2013-11-08", "nasc_fmt": "08/11/2013", "educacenso": "128242569400", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA OSCAR SCHADE - 172, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "14", "nome": "FLAVIO HENRIQUE GOMES DE OLIVEIRA", "ra": "000114707251", "ra_dig": "6", "ra_uf": "SP", "nasc": "2013-11-29", "nasc_fmt": "29/11/2013", "educacenso": "128242569745", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA SILVIO ESTEVES - 37, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "15", "nome": "GABRIELLY SOARES DE CARVALHO", "ra": "000115705728", "ra_dig": "7", "ra_uf": "SP", "nasc": "2014-03-24", "nasc_fmt": "24/03/2014", "educacenso": "130523636899", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "ANTONIO FOGAL - 213, JARDIM UMUARAMA - SAO PAULO - SP", "def": ""},
+    {"num": "16", "nome": "GUILHERME RIBEIRO LIMA ISMAEL", "ra": "000114079131", "ra_dig": "X", "ra_uf": "SP", "nasc": "2013-07-08", "nasc_fmt": "08/07/2013", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "AVENIDA ESTEVAO MENDONCA - 3, VILA SANTA CATARINA - SAO PAULO - SP", "def": ""},
+    {"num": "17", "nome": "HEITOR GABRIEL VIANA DA SILVA", "ra": "000115095986", "ra_dig": "1", "ra_uf": "SP", "nasc": "2013-08-03", "nasc_fmt": "03/08/2013", "educacenso": "130524034434", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA SÍLVIO ESTEVES - 37, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "18", "nome": "HEITOR LIMA NASCIMENTO", "ra": "000124955336", "ra_dig": "2", "ra_uf": "SP", "nasc": "2014-04-06", "nasc_fmt": "06/04/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "AVENIDA YERVANT KISSAJIKIAN - 459, VILA CONSTANÇA - SAO PAULO - SP", "def": ""},
+    {"num": "19", "nome": "HELOÍSA ALVES ALENCAR", "ra": "000115867758", "ra_dig": "3", "ra_uf": "SP", "nasc": "2013-12-29", "nasc_fmt": "29/12/2013", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA WILSON RIBEIRO BONFIM - 94, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "20", "nome": "IAN LEANDRO DEL ZOTTO", "ra": "000115650358", "ra_dig": "9", "ra_uf": "SP", "nasc": "2013-07-28", "nasc_fmt": "28/07/2013", "educacenso": "130268334284", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA CRISTÓVÃO LINS DE VASCONCELOS - 40, JARDIM CONSÓRCIO - SAO PAULO - SP", "def": ""},
+    {"num": "21", "nome": "JOÃO HENRIQUE PEREIRA MARQUES", "ra": "000114707602", "ra_dig": "9", "ra_uf": "SP", "nasc": "2013-06-27", "nasc_fmt": "27/06/2013", "educacenso": "128242568935", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "PEDRO SABINO DE BRITO - 25, JARDIM LOS ANGELES - SAO PAULO - SP", "def": "BAIXA VISAO"},
+    {"num": "22", "nome": "JULIA GOMES DA SILVA", "ra": "000120544144", "ra_dig": "X", "ra_uf": "SP", "nasc": "2013-12-14", "nasc_fmt": "14/12/2013", "educacenso": "178669424397", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "LEONIDAS MOREIRA - 60, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "23", "nome": "JULLIANA FAUSTINO LIMA DOS SANTOS", "ra": "000114710663", "ra_dig": "0", "ra_uf": "SP", "nasc": "2013-08-22", "nasc_fmt": "22/08/2013", "educacenso": "128242951712", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA SÍLVIO ESTEVES - 419, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "24", "nome": "KAROLINA NASCIMENTO BOMFIM", "ra": "000114871055", "ra_dig": "3", "ra_uf": "SP", "nasc": "2014-03-17", "nasc_fmt": "17/03/2014", "educacenso": "128242923263", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA WILSON RIBEIRO BONFIM - 94, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "25", "nome": "LORENA LIMA CAVALCANTE SILVA", "ra": "000114921191", "ra_dig": "X", "ra_uf": "SP", "nasc": "2013-05-30", "nasc_fmt": "30/05/2013", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA WILSON RIBEIRO BONFIM - 94, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "26", "nome": "LUAN MARTINS PEREIRA", "ra": "000115688633", "ra_dig": "8", "ra_uf": "SP", "nasc": "2013-05-12", "nasc_fmt": "12/05/2013", "educacenso": "130523804198", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "ALCIDES MACIEL - 33, VILA SAO PAULO - SAO PAULO - SP", "def": ""},
+    {"num": "27", "nome": "LUIS FELIPE DANTAS MEDEIRO FERREIRA", "ra": "000114420110", "ra_dig": "X", "ra_uf": "SP", "nasc": "2013-04-10", "nasc_fmt": "10/04/2013", "educacenso": "128242783747", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA FERNANDO DE TREJO - 33, VILA CONSTANÇA - SAO PAULO - SP", "def": "AUTISTA INFANTIL"},
+    {"num": "28", "nome": "MELYSSA DA SILVA CANTANHEDE", "ra": "000114698516", "ra_dig": "2", "ra_uf": "SP", "nasc": "2013-08-24", "nasc_fmt": "24/08/2013", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA LEÔNIDAS MOREIRA - 21, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "29", "nome": "NATHALLY VITÓRIA RODRIGUES DA SILVA", "ra": "000114707277", "ra_dig": "2", "ra_uf": "SP", "nasc": "2013-08-01", "nasc_fmt": "01/08/2013", "educacenso": "128242571138", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA ALCIDES MACIEL - 59, VILA SÃO PAULO - SAO PAULO - SP", "def": ""},
+    {"num": "30", "nome": "RYAN DE ANDRADE SANTOS", "ra": "000115461017", "ra_dig": "2", "ra_uf": "SP", "nasc": "2013-06-04", "nasc_fmt": "04/06/2013", "educacenso": "130523806565", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "SAMUEL ENDLER - 27, JARDIM ALVORADA ZS - SAO PAULO - SP", "def": ""},
+    {"num": "31", "nome": "SAMUEL ALVES GONZAGA", "ra": "000115294143", "ra_dig": "4", "ra_uf": "SP", "nasc": "2013-03-18", "nasc_fmt": "18/03/2013", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA AMADOR LOURENÇO - 730, VILA CONSTANÇA - SAO PAULO - SP", "def": ""},
+    {"num": "32", "nome": "SARA DA SILVA SOUZA", "ra": "000116767213", "ra_dig": "6", "ra_uf": "SP", "nasc": "2013-07-15", "nasc_fmt": "15/07/2013", "educacenso": "178669423153", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "WILSON RIBEIRO BONFIM - 109, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "33", "nome": "SOPHIA COSTA DE LIRA", "ra": "000114751520", "ra_dig": "7", "ra_uf": "SP", "nasc": "2013-10-22", "nasc_fmt": "22/10/2013", "educacenso": "128242570409", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA DOUTOR NELSON MONTEIRO DE CARVALHO - 365, JARDIM MARTINI - SAO PAULO - SP", "def": ""},
+    {"num": "34", "nome": "THOMAS STOPPA BARBOSA DA SILVA", "ra": "000115275999", "ra_dig": "1", "ra_uf": "SP", "nasc": "2013-07-21", "nasc_fmt": "21/07/2013", "educacenso": "130523803892", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA LUCIO SENECA - 75, JD CIDALIA - SAO PAULO - SP", "def": ""},
+    {"num": "35", "nome": "VITOR GABRIEL NOBRE DE BARROS", "ra": "000116197937", "ra_dig": "2", "ra_uf": "SP", "nasc": "2014-02-06", "nasc_fmt": "06/02/2014", "educacenso": "169005768931", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA OSCAR SCHADE - 172, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "36", "nome": "YGOR GUILHERME PEREIRA SILVA", "ra": "000114722803", "ra_dig": "6", "ra_uf": "SP", "nasc": "2013-07-02", "nasc_fmt": "02/07/2013", "educacenso": "128242569150", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA RAUL MARQUES MARINHO - 376, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "37", "nome": "EMERSON ALVES FELIPE", "ra": "000120584740", "ra_dig": "6", "ra_uf": "SP", "nasc": "2014-05-03", "nasc_fmt": "03/05/2014", "educacenso": "178669702389", "mat_inicio": "08/05/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA ELISEU BORGES - 307, MORRO GRANDE - SAO PAULO - SP", "def": ""},
+    {"num": "38", "nome": "LORENA DE JESUS ASSIS", "ra": "000115724721", "ra_dig": "0", "ra_uf": "SP", "nasc": "2014-02-25", "nasc_fmt": "25/02/2014", "educacenso": "130523620038", "mat_inicio": "06/08/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA MANUEL MURGUIA - 43, VILA SÃO PAULO - SAO PAULO - SP", "def": ""},
   ],
-  '7B': [
-    {num:'1',nome:'ALICE ALVES DE BRITO MANSO'},
-    {num:'2',nome:'ANDERSON BARBOSA DOS SANTOS JUNIOR'},
-    {num:'3',nome:'ANDRÉ BORGES FERREIRA'},
-    {num:'4',nome:'ANDRYS DE ANDRADE SANTOS'},
-    {num:'5',nome:'ANNA VITÓRIA AQUINO SANTOS'},
-    {num:'6',nome:'ARTHUR DE OLIVEIRA BRAGA'},
-    {num:'7',nome:'BEATRIZ LORENA FAGUNDES DE ARAUJO'},
-    {num:'8',nome:'BERNARDO HENRIQUE DA COSTA PAULA'},
-    {num:'9',nome:'BRENO JOSÉ DOS SANTOS BENTO'},
-    {num:'10',nome:'BRYAN SILVA PEREIRA'},
-    {num:'11',nome:'DESIRÈ FERNANDA DELOGO DE OLIVEIRA'},
-    {num:'12',nome:'ENZO GABRIEL SILVA DE SOUZA'},
-    {num:'13',nome:'FELIPE SANTOS SOUZA DA MOTA'},
-    {num:'14',nome:'FLAVIO HENRIQUE GOMES DE OLIVEIRA'},
-    {num:'15',nome:'GABRIELLY SOARES DE CARVALHO'},
-    {num:'16',nome:'GUILHERME RIBEIRO LIMA ISMAEL'},
-    {num:'17',nome:'HEITOR GABRIEL VIANA DA SILVA'},
-    {num:'18',nome:'HEITOR LIMA NASCIMENTO'},
-    {num:'19',nome:'HELOÍSA ALVES ALENCAR'},
-    {num:'20',nome:'IAN LEANDRO DEL ZOTTO'},
-    {num:'21',nome:'JOÃO HENRIQUE PEREIRA MARQUES'},
-    {num:'22',nome:'JULIA GOMES DA SILVA'},
-    {num:'23',nome:'JULLIANA FAUSTINO LIMA DOS SANTOS'},
-    {num:'24',nome:'KAROLINA NASCIMENTO BOMFIM'},
-    {num:'25',nome:'LORENA DE JESUS ASSIS'},
-    {num:'26',nome:'LORENA LIMA CAVALCANTE SILVA'},
-    {num:'27',nome:'LUAN MARTINS PEREIRA'},
-    {num:'28',nome:'LUIS FELIPE DANTAS MEDEIRO FERREIRA'},
-    {num:'29',nome:'MELYSSA DA SILVA CANTANHEDE'},
-    {num:'30',nome:'NATHALLY VITÓRIA RODRIGUES DA SILVA'},
-    {num:'31',nome:'RYAN DE ANDRADE SANTOS'},
-    {num:'32',nome:'SAMUEL ALVES GONZAGA'},
-    {num:'33',nome:'SARA DA SILVA SOUZA'},
-    {num:'34',nome:'SOPHIA COSTA DE LIRA'},
-    {num:'35',nome:'THOMAS STOPPA BARBOSA DA SILVA'},
-    {num:'36',nome:'VITOR GABRIEL NOBRE DE BARROS'},
-    {num:'37',nome:'YGOR GUILHERME PEREIRA SILVA'},
-    {num:'38',nome:'EMERSON ALVES FELIPE'}
+  "7B":[
+    {"num": "1", "nome": "ALICE ALVES DE BRITO MANSO", "ra": "000124220557", "ra_dig": "3", "ra_uf": "SP", "nasc": "2012-06-14", "nasc_fmt": "14/06/2012", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA ROQUE GIANGRANDE FILHO - 130, JARDIM ITAPEVA - SAO PAULO - SP", "def": ""},
+    {"num": "2", "nome": "ANDERSON BARBOSA DOS SANTOS JUNIOR", "ra": "000114612613", "ra_dig": "X", "ra_uf": "SP", "nasc": "2013-05-18", "nasc_fmt": "18/05/2013", "educacenso": "128242953090", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA DJALMA CORREIA - 14A, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "3", "nome": "ANDRÉ BORGES FERREIRA", "ra": "000114700184", "ra_dig": "4", "ra_uf": "SP", "nasc": "2014-03-17", "nasc_fmt": "17/03/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA PEDRO SABINO DE BRITO - 115, JARDIM LOS ANGELES - SAO PAULO - SP", "def": ""},
+    {"num": "4", "nome": "ANDRYS DE ANDRADE SANTOS", "ra": "000115460982", "ra_dig": "0", "ra_uf": "SP", "nasc": "2013-06-04", "nasc_fmt": "04/06/2013", "educacenso": "130523806646", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA SAMUEL ENDLER - 27, JARDIM ALVORADA ZS - SAO PAULO - SP", "def": ""},
+    {"num": "5", "nome": "ANNA VITÓRIA AQUINO SANTOS", "ra": "000114430354", "ra_dig": "0", "ra_uf": "SP", "nasc": "2014-01-05", "nasc_fmt": "05/01/2014", "educacenso": "128242570166", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "PEDRO SABINO DE BRITO - 119, JARDIM LOS ANGELES - SAO PAULO - SP", "def": ""},
+    {"num": "6", "nome": "ARTHUR DE OLIVEIRA BRAGA", "ra": "000114434995", "ra_dig": "3", "ra_uf": "SP", "nasc": "2013-08-10", "nasc_fmt": "10/08/2013", "educacenso": "128257917507", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "AVENIDA CUPECÊ - 1877, CIDADE ADEMAR - SAO PAULO - SP", "def": ""},
+    {"num": "7", "nome": "BEATRIZ LORENA FAGUNDES DE ARAUJO", "ra": "000122716889", "ra_dig": "5", "ra_uf": "SP", "nasc": "2013-06-10", "nasc_fmt": "10/06/2013", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA RUBEM DE SOUZA - 438, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "8", "nome": "BERNARDO HENRIQUE DA COSTA PAULA", "ra": "000114710657", "ra_dig": "5", "ra_uf": "SP", "nasc": "2013-12-25", "nasc_fmt": "25/12/2013", "educacenso": "128242951984", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "ANTONIO FOGAL - 15, JARDIM UMUARAMA - SAO PAULO - SP", "def": ""},
+    {"num": "9", "nome": "BRENO JOSÉ DOS SANTOS BENTO", "ra": "000114694779", "ra_dig": "3", "ra_uf": "SP", "nasc": "2013-10-22", "nasc_fmt": "22/10/2013", "educacenso": "128242568269", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA SAMUEL ENDLER - 59, JARDIM ALVORADA ZS - SAO PAULO - SP", "def": ""},
+    {"num": "10", "nome": "BRYAN SILVA PEREIRA", "ra": "000116125553", "ra_dig": "9", "ra_uf": "SP", "nasc": "2014-03-02", "nasc_fmt": "02/03/2014", "educacenso": "169005396961", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA CARLOS FACCHINA - 571, AMERICANÓPOLIS - SAO PAULO - SP", "def": ""},
+    {"num": "11", "nome": "DESIRÈ FERNANDA DELOGO DE OLIVEIRA", "ra": "000115779222", "ra_dig": "4", "ra_uf": "SP", "nasc": "2014-01-28", "nasc_fmt": "28/01/2014", "educacenso": "130540380252", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "AVENIDA WASHINGTON LUÍS - 2920, SANTO AMARO - SAO PAULO - SP", "def": ""},
+    {"num": "12", "nome": "ENZO GABRIEL SILVA DE SOUZA", "ra": "000114710237", "ra_dig": "5", "ra_uf": "SP", "nasc": "2014-02-15", "nasc_fmt": "15/02/2014", "educacenso": "128242571561", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA LUCINDO DOS PASSOS - 65, JARDIM PRUDÊNCIA - SAO PAULO - SP", "def": ""},
+    {"num": "13", "nome": "FELIPE SANTOS SOUZA DA MOTA", "ra": "000114697173", "ra_dig": "4", "ra_uf": "SP", "nasc": "2013-11-08", "nasc_fmt": "08/11/2013", "educacenso": "128242569400", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA OSCAR SCHADE - 172, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "14", "nome": "FLAVIO HENRIQUE GOMES DE OLIVEIRA", "ra": "000114707251", "ra_dig": "6", "ra_uf": "SP", "nasc": "2013-11-29", "nasc_fmt": "29/11/2013", "educacenso": "128242569745", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA SILVIO ESTEVES - 37, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "15", "nome": "GABRIELLY SOARES DE CARVALHO", "ra": "000115705728", "ra_dig": "7", "ra_uf": "SP", "nasc": "2014-03-24", "nasc_fmt": "24/03/2014", "educacenso": "130523636899", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "ANTONIO FOGAL - 213, JARDIM UMUARAMA - SAO PAULO - SP", "def": ""},
+    {"num": "16", "nome": "GUILHERME RIBEIRO LIMA ISMAEL", "ra": "000114079131", "ra_dig": "X", "ra_uf": "SP", "nasc": "2013-07-08", "nasc_fmt": "08/07/2013", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "AVENIDA ESTEVAO MENDONCA - 3, VILA SANTA CATARINA - SAO PAULO - SP", "def": ""},
+    {"num": "17", "nome": "HEITOR GABRIEL VIANA DA SILVA", "ra": "000115095986", "ra_dig": "1", "ra_uf": "SP", "nasc": "2013-08-03", "nasc_fmt": "03/08/2013", "educacenso": "130524034434", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA SÍLVIO ESTEVES - 37, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "18", "nome": "HEITOR LIMA NASCIMENTO", "ra": "000124955336", "ra_dig": "2", "ra_uf": "SP", "nasc": "2014-04-06", "nasc_fmt": "06/04/2014", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "AVENIDA YERVANT KISSAJIKIAN - 459, VILA CONSTANÇA - SAO PAULO - SP", "def": ""},
+    {"num": "19", "nome": "HELOÍSA ALVES ALENCAR", "ra": "000115867758", "ra_dig": "3", "ra_uf": "SP", "nasc": "2013-12-29", "nasc_fmt": "29/12/2013", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA WILSON RIBEIRO BONFIM - 94, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "20", "nome": "IAN LEANDRO DEL ZOTTO", "ra": "000115650358", "ra_dig": "9", "ra_uf": "SP", "nasc": "2013-07-28", "nasc_fmt": "28/07/2013", "educacenso": "130268334284", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA CRISTÓVÃO LINS DE VASCONCELOS - 40, JARDIM CONSÓRCIO - SAO PAULO - SP", "def": ""},
+    {"num": "21", "nome": "JOÃO HENRIQUE PEREIRA MARQUES", "ra": "000114707602", "ra_dig": "9", "ra_uf": "SP", "nasc": "2013-06-27", "nasc_fmt": "27/06/2013", "educacenso": "128242568935", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "PEDRO SABINO DE BRITO - 25, JARDIM LOS ANGELES - SAO PAULO - SP", "def": "BAIXA VISAO"},
+    {"num": "22", "nome": "JULIA GOMES DA SILVA", "ra": "000120544144", "ra_dig": "X", "ra_uf": "SP", "nasc": "2013-12-14", "nasc_fmt": "14/12/2013", "educacenso": "178669424397", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "LEONIDAS MOREIRA - 60, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "23", "nome": "JULLIANA FAUSTINO LIMA DOS SANTOS", "ra": "000114710663", "ra_dig": "0", "ra_uf": "SP", "nasc": "2013-08-22", "nasc_fmt": "22/08/2013", "educacenso": "128242951712", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA SÍLVIO ESTEVES - 419, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "24", "nome": "KAROLINA NASCIMENTO BOMFIM", "ra": "000114871055", "ra_dig": "3", "ra_uf": "SP", "nasc": "2014-03-17", "nasc_fmt": "17/03/2014", "educacenso": "128242923263", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA WILSON RIBEIRO BONFIM - 94, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "25", "nome": "LORENA LIMA CAVALCANTE SILVA", "ra": "000114921191", "ra_dig": "X", "ra_uf": "SP", "nasc": "2013-05-30", "nasc_fmt": "30/05/2013", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA WILSON RIBEIRO BONFIM - 94, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "26", "nome": "LUAN MARTINS PEREIRA", "ra": "000115688633", "ra_dig": "8", "ra_uf": "SP", "nasc": "2013-05-12", "nasc_fmt": "12/05/2013", "educacenso": "130523804198", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "ALCIDES MACIEL - 33, VILA SAO PAULO - SAO PAULO - SP", "def": ""},
+    {"num": "27", "nome": "LUIS FELIPE DANTAS MEDEIRO FERREIRA", "ra": "000114420110", "ra_dig": "X", "ra_uf": "SP", "nasc": "2013-04-10", "nasc_fmt": "10/04/2013", "educacenso": "128242783747", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA FERNANDO DE TREJO - 33, VILA CONSTANÇA - SAO PAULO - SP", "def": "AUTISTA INFANTIL"},
+    {"num": "28", "nome": "MELYSSA DA SILVA CANTANHEDE", "ra": "000114698516", "ra_dig": "2", "ra_uf": "SP", "nasc": "2013-08-24", "nasc_fmt": "24/08/2013", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA LEÔNIDAS MOREIRA - 21, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "29", "nome": "NATHALLY VITÓRIA RODRIGUES DA SILVA", "ra": "000114707277", "ra_dig": "2", "ra_uf": "SP", "nasc": "2013-08-01", "nasc_fmt": "01/08/2013", "educacenso": "128242571138", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA ALCIDES MACIEL - 59, VILA SÃO PAULO - SAO PAULO - SP", "def": ""},
+    {"num": "30", "nome": "RYAN DE ANDRADE SANTOS", "ra": "000115461017", "ra_dig": "2", "ra_uf": "SP", "nasc": "2013-06-04", "nasc_fmt": "04/06/2013", "educacenso": "130523806565", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "SAMUEL ENDLER - 27, JARDIM ALVORADA ZS - SAO PAULO - SP", "def": ""},
+    {"num": "31", "nome": "SAMUEL ALVES GONZAGA", "ra": "000115294143", "ra_dig": "4", "ra_uf": "SP", "nasc": "2013-03-18", "nasc_fmt": "18/03/2013", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA AMADOR LOURENÇO - 730, VILA CONSTANÇA - SAO PAULO - SP", "def": ""},
+    {"num": "32", "nome": "SARA DA SILVA SOUZA", "ra": "000116767213", "ra_dig": "6", "ra_uf": "SP", "nasc": "2013-07-15", "nasc_fmt": "15/07/2013", "educacenso": "178669423153", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "WILSON RIBEIRO BONFIM - 109, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "33", "nome": "SOPHIA COSTA DE LIRA", "ra": "000114751520", "ra_dig": "7", "ra_uf": "SP", "nasc": "2013-10-22", "nasc_fmt": "22/10/2013", "educacenso": "128242570409", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA DOUTOR NELSON MONTEIRO DE CARVALHO - 365, JARDIM MARTINI - SAO PAULO - SP", "def": ""},
+    {"num": "34", "nome": "THOMAS STOPPA BARBOSA DA SILVA", "ra": "000115275999", "ra_dig": "1", "ra_uf": "SP", "nasc": "2013-07-21", "nasc_fmt": "21/07/2013", "educacenso": "130523803892", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA LUCIO SENECA - 75, JD CIDALIA - SAO PAULO - SP", "def": ""},
+    {"num": "35", "nome": "VITOR GABRIEL NOBRE DE BARROS", "ra": "000116197937", "ra_dig": "2", "ra_uf": "SP", "nasc": "2014-02-06", "nasc_fmt": "06/02/2014", "educacenso": "169005768931", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA OSCAR SCHADE - 172, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "36", "nome": "YGOR GUILHERME PEREIRA SILVA", "ra": "000114722803", "ra_dig": "6", "ra_uf": "SP", "nasc": "2013-07-02", "nasc_fmt": "02/07/2013", "educacenso": "128242569150", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA RAUL MARQUES MARINHO - 376, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "37", "nome": "EMERSON ALVES FELIPE", "ra": "000120584740", "ra_dig": "6", "ra_uf": "SP", "nasc": "2014-05-03", "nasc_fmt": "03/05/2014", "educacenso": "178669702389", "mat_inicio": "08/05/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA ELISEU BORGES - 307, MORRO GRANDE - SAO PAULO - SP", "def": ""},
+    {"num": "38", "nome": "LORENA DE JESUS ASSIS", "ra": "000115724721", "ra_dig": "0", "ra_uf": "SP", "nasc": "2014-02-25", "nasc_fmt": "25/02/2014", "educacenso": "130523620038", "mat_inicio": "06/08/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA MANUEL MURGUIA - 43, VILA SÃO PAULO - SAO PAULO - SP", "def": ""},
   ],
-  '8A': [
-    {num:'1',nome:'ALANA FARIA DOS ANJOS'},
-    {num:'2',nome:'ANA BEATRIZ SANTOS SOARES'},
-    {num:'3',nome:'ARTHUR CLAUDINO DOS SANTOS'},
-    {num:'4',nome:'BEATRIZ ESTRELA DE OLIVEIRA'},
-    {num:'5',nome:'BRYAN ESTEVES ALMEIDA DOS SANTOS'},
-    {num:'6',nome:'CAIO RYAN BARBOSA LAGE'},
-    {num:'7',nome:'EMANUELA MESQUITA MATOS'},
-    {num:'8',nome:'ENZO GABRIEL RICARTE DO VALE'},
-    {num:'9',nome:'ENZO LUCAS BIGLIA SILVA'},
-    {num:'10',nome:'ENZO MARCONDES DA SILVA'},
-    {num:'11',nome:'GABRIEL FERREIRA BARBOSA'},
-    {num:'12',nome:'GIOVANNA GIULIA FERREIRA DA CRUZ'},
-    {num:'13',nome:'GUSTAVO MATÍAS NUNES'},
-    {num:'14',nome:'ISAAC GOMES BARROS MOREIRA'},
-    {num:'15',nome:'ISABELLA CRISTYNA BAPTISTA DE LIMA'},
-    {num:'16',nome:'ISIS PAIVA VOLTANI'},
-    {num:'17',nome:'JULIA GARCIA CHAGAS'},
-    {num:'18',nome:'KAMILLY MARQUES DO CARMO DE OLIVEIRA'},
-    {num:'19',nome:'KEILLY MARCO DA SILVA'},
-    {num:'20',nome:'KELLY FERNANDA DE OLIVEIRA'},
-    {num:'21',nome:'LAURA SILVA ZAPATA'},
-    {num:'22',nome:'LETICIA BRITO DOS REIS'},
-    {num:'23',nome:'LUIZA GABRIELLA RAMOS COSTA BARRA'},
-    {num:'24',nome:'MARIA VITORIA PEREIRA'},
-    {num:'25',nome:'MIGUEL OLIVEIRA DA COSTA'},
-    {num:'26',nome:'MIGUEL OLIVEIRA PIZARRO'},
-    {num:'27',nome:'MIRELA DA SILVA ANDRADE'},
-    {num:'28',nome:'NICOLY CAROLINE SILVA GUIMARÃES COSTA'},
-    {num:'29',nome:'PIETRO ARTHUR NERI LIMA'},
-    {num:'30',nome:'RAFAELLA OLIVEIRA GOMES'},
-    {num:'31',nome:'REBECKA SANTOS DA SILVA'},
-    {num:'32',nome:'RENAN LEONARDO'},
-    {num:'33',nome:'SOPHIA FERREIRA DE OLIVEIRA'},
-    {num:'34',nome:'THAIS DOS SANTOS COSTA'},
-    {num:'35',nome:'TIAGO GADELHA CHABUH'},
-    {num:'36',nome:'YASMIN FIALHO ARAUJO VIEIRA'},
-    {num:'37',nome:'KEVIN MIGUEL DOS SANTOS FREITAS'}
+  "8A":[
+    {"num": "1", "nome": "ALANA FARIA DOS ANJOS", "ra": "000115762699", "ra_dig": "3", "ra_uf": "SP", "nasc": "2012-10-08", "nasc_fmt": "08/10/2012", "educacenso": "127540431449", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA PASTOR RUBENS LOPES - 226, AMERICANÓPOLIS - SAO PAULO - SP", "def": ""},
+    {"num": "2", "nome": "ANA BEATRIZ SANTOS SOARES", "ra": "000115676640", "ra_dig": "0", "ra_uf": "SP", "nasc": "2012-07-13", "nasc_fmt": "13/07/2012", "educacenso": "130536868483", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA DOUTOR DJALMA PINHEIRO FRANCO - 892, VILA SANTA CATARINA - SAO PAULO - SP", "def": ""},
+    {"num": "3", "nome": "ARTHUR CLAUDINO DOS SANTOS", "ra": "000115606807", "ra_dig": "1", "ra_uf": "SP", "nasc": "2012-04-05", "nasc_fmt": "05/04/2012", "educacenso": "130524303001", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA ARMANDO GONZAGA - 42, JARDIM MARIA LUIZA - SAO PAULO - SP", "def": ""},
+    {"num": "4", "nome": "BEATRIZ ESTRELA DE OLIVEIRA", "ra": "000120291342", "ra_dig": "8", "ra_uf": "SP", "nasc": "2013-05-14", "nasc_fmt": "14/05/2013", "educacenso": "179207396750", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA ELISEU BORGES - 307, JD NITERÓI - SAO PAULO - SP", "def": ""},
+    {"num": "5", "nome": "BRYAN ESTEVES ALMEIDA DOS SANTOS", "ra": "000114473182", "ra_dig": "3", "ra_uf": "SP", "nasc": "2012-12-16", "nasc_fmt": "16/12/2012", "educacenso": "128243170510", "mat_inicio": "03/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA SALVADOR OLIVEIRA PAES - 322, JARDIM SELMA - SAO PAULO - SP", "def": ""},
+    {"num": "6", "nome": "CAIO RYAN BARBOSA LAGE", "ra": "000113892580", "ra_dig": "9", "ra_uf": "SP", "nasc": "2012-09-09", "nasc_fmt": "09/09/2012", "educacenso": "125275296745", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA PEDRO SABINO DE BRITO - 07, VILA SÃO PAULO - SAO PAULO - SP", "def": ""},
+    {"num": "7", "nome": "EMANUELA MESQUITA MATOS", "ra": "000120733861", "ra_dig": "8", "ra_uf": "SP", "nasc": "2012-10-03", "nasc_fmt": "03/10/2012", "educacenso": "178669424982", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA SINCORÁ - 95, JARDIM UMUARAMA - SAO PAULO - SP", "def": ""},
+    {"num": "8", "nome": "ENZO GABRIEL RICARTE DO VALE", "ra": "000113476675", "ra_dig": "0", "ra_uf": "SP", "nasc": "2013-02-20", "nasc_fmt": "20/02/2013", "educacenso": "", "mat_inicio": "04/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "TRAVESSA ANA DE JESUS FERREIRA - 202, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "9", "nome": "ENZO LUCAS BIGLIA SILVA", "ra": "000113490582", "ra_dig": "8", "ra_uf": "SP", "nasc": "2012-08-29", "nasc_fmt": "29/08/2012", "educacenso": "125275940423", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA FREI JOÃO DO ROSARIO - 590, VILA MARARI - SAO PAULO - SP", "def": ""},
+    {"num": "10", "nome": "ENZO MARCONDES DA SILVA", "ra": "000115390272", "ra_dig": "2", "ra_uf": "SP", "nasc": "2013-03-19", "nasc_fmt": "19/03/2013", "educacenso": "130523863011", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "AVENIDA CUPECE - 1877, CIDADE ADEMAR - SAO PAULO - SP", "def": ""},
+    {"num": "11", "nome": "GABRIEL FERREIRA BARBOSA", "ra": "000113631612", "ra_dig": "7", "ra_uf": "SP", "nasc": "2013-01-06", "nasc_fmt": "06/01/2013", "educacenso": "125276135001", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA DOLORES ESCOBAR BRANCO - 27, VILA SÃO PAULO - SAO PAULO - SP", "def": ""},
+    {"num": "12", "nome": "GIOVANNA GIULIA FERREIRA DA CRUZ", "ra": "000113479561", "ra_dig": "0", "ra_uf": "SP", "nasc": "2012-05-05", "nasc_fmt": "05/05/2012", "educacenso": "125276129893", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA LEÔNIDAS MOREIRA - 181, VILA INGLESA - SAO PAULO - SP", "def": "INTELECTUAL, AUTISTA INFANTIL"},
+    {"num": "13", "nome": "GUSTAVO MATÍAS NUNES", "ra": "000116119396", "ra_dig": "0", "ra_uf": "SP", "nasc": "2012-05-19", "nasc_fmt": "19/05/2012", "educacenso": "169005609469", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "AVENIDA MARGINAL - 144, JARDIM MARTINI - SAO PAULO - SP", "def": ""},
+    {"num": "14", "nome": "ISAAC GOMES BARROS MOREIRA", "ra": "000115451760", "ra_dig": "3", "ra_uf": "SP", "nasc": "2013-03-28", "nasc_fmt": "28/03/2013", "educacenso": "130523801415", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA WILSON RIBEIRO BONFIM - 159, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "15", "nome": "ISABELLA CRISTYNA BAPTISTA DE LIMA", "ra": "000113482688", "ra_dig": "6", "ra_uf": "SP", "nasc": "2012-04-04", "nasc_fmt": "04/04/2012", "educacenso": "125264938465", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA ROLANDO CURTI - 301, VILA CLARA - SAO PAULO - SP", "def": ""},
+    {"num": "16", "nome": "ISIS PAIVA VOLTANI", "ra": "000114567120", "ra_dig": "2", "ra_uf": "SP", "nasc": "2012-10-11", "nasc_fmt": "11/10/2012", "educacenso": "128153231765", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA DOUTOR EPAMINONDAS BARRA - 18, VILA DO CASTELO - SAO PAULO - SP", "def": ""},
+    {"num": "17", "nome": "JULIA GARCIA CHAGAS", "ra": "000115727104", "ra_dig": "2", "ra_uf": "SP", "nasc": "2013-01-14", "nasc_fmt": "14/01/2013", "educacenso": "130524016452", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA PASCOAL MELANTONIO - 329, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "18", "nome": "KAMILLY MARQUES DO CARMO DE OLIVEIRA", "ra": "000115301627", "ra_dig": "8", "ra_uf": "SP", "nasc": "2013-01-15", "nasc_fmt": "15/01/2013", "educacenso": "130524311969", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA JOÃO GOMES BATISTA - 130, JARDIM CIDÁLIA - SAO PAULO - SP", "def": ""},
+    {"num": "19", "nome": "KEILLY MARCO DA SILVA", "ra": "000114022143", "ra_dig": "7", "ra_uf": "SP", "nasc": "2012-10-25", "nasc_fmt": "25/10/2012", "educacenso": "125263100166", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA MANUEL ALVES DE SIQUEIRA - 51, JARDIM ITACOLOMI - SAO PAULO - SP", "def": ""},
+    {"num": "20", "nome": "KELLY FERNANDA DE OLIVEIRA", "ra": "000115987722", "ra_dig": "1", "ra_uf": "SP", "nasc": "2012-04-29", "nasc_fmt": "29/04/2012", "educacenso": "175741238539", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "PRAÇA CORONEL SATURNINO DE CARVALHO - 25, JARDIM BELÉM - SAO PAULO - SP", "def": ""},
+    {"num": "21", "nome": "LAURA SILVA ZAPATA", "ra": "000113476672", "ra_dig": "5", "ra_uf": "SP", "nasc": "2012-12-06", "nasc_fmt": "06/12/2012", "educacenso": "125276133149", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA WILSON RIBEIRO BONFIM - 94, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "22", "nome": "LETICIA BRITO DOS REIS", "ra": "000115309812", "ra_dig": "X", "ra_uf": "SP", "nasc": "2013-03-12", "nasc_fmt": "12/03/2013", "educacenso": "130525499287", "mat_inicio": "19/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA RODRIGO JÚNIOR - 107, VILA SANTA CATARINA - SAO PAULO - SP", "def": ""},
+    {"num": "23", "nome": "LUIZA GABRIELLA RAMOS COSTA BARRA", "ra": "000115851685", "ra_dig": "X", "ra_uf": "SP", "nasc": "2012-12-17", "nasc_fmt": "17/12/2012", "educacenso": "176089950334", "mat_inicio": "09/03/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "AVENIDA SARGENTO GERALDO SANT'ANA - 301, JARDIM TAQUARAL - SAO PAULO - SP", "def": ""},
+    {"num": "24", "nome": "MARIA VITORIA PEREIRA", "ra": "000120523414", "ra_dig": "7", "ra_uf": "SP", "nasc": "2012-10-11", "nasc_fmt": "11/10/2012", "educacenso": "179266532680", "mat_inicio": "10/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA JOSÉ ANTÔNIO MARTINS - 345, VILA SÃO PAULO - SAO PAULO - SP", "def": ""},
+    {"num": "25", "nome": "MIGUEL OLIVEIRA DA COSTA", "ra": "000114367565", "ra_dig": "4", "ra_uf": "SP", "nasc": "2012-12-11", "nasc_fmt": "11/12/2012", "educacenso": "125275694988", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA ANTÔNIO FOGAL - 28, JARDIM UMUARAMA - SAO PAULO - SP", "def": ""},
+    {"num": "26", "nome": "MIGUEL OLIVEIRA PIZARRO", "ra": "000114416048", "ra_dig": "0", "ra_uf": "SP", "nasc": "2012-11-06", "nasc_fmt": "06/11/2012", "educacenso": "128242754720", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "AVENIDA INTERLAGOS - 871, JARDIM UMUARAMA - SAO PAULO - SP", "def": ""},
+    {"num": "27", "nome": "MIRELA DA SILVA ANDRADE", "ra": "000120845144", "ra_dig": "3", "ra_uf": "SP", "nasc": "2012-09-26", "nasc_fmt": "26/09/2012", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA FREI FRANCISCO FERREIRA - 490, VILA MISSIONARIA - SAO PAULO - SP", "def": ""},
+    {"num": "28", "nome": "NICOLY CAROLINE SILVA GUIMARÃES COSTA", "ra": "000115065578", "ra_dig": "1", "ra_uf": "SP", "nasc": "2012-12-19", "nasc_fmt": "19/12/2012", "educacenso": "130524334403", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA WILSON RIBEIRO BONFIM - 94, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "29", "nome": "PIETRO ARTHUR NERI LIMA", "ra": "000113507574", "ra_dig": "8", "ra_uf": "SP", "nasc": "2012-09-11", "nasc_fmt": "11/09/2012", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA OSCAR SCHADE - 226, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "30", "nome": "RAFAELLA OLIVEIRA GOMES", "ra": "000113519168", "ra_dig": "2", "ra_uf": "SP", "nasc": "2013-02-13", "nasc_fmt": "13/02/2013", "educacenso": "128242725623", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA DARABI - 90, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "31", "nome": "REBECKA SANTOS DA SILVA", "ra": "000114698693", "ra_dig": "2", "ra_uf": "SP", "nasc": "2012-06-28", "nasc_fmt": "28/06/2012", "educacenso": "128242882052", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA PROFESSORA IOLE MARIA CARMONA - 42 A, AMERICANOPOLIS - SAO PAULO - SP", "def": ""},
+    {"num": "32", "nome": "RENAN LEONARDO", "ra": "000116149164", "ra_dig": "8", "ra_uf": "SP", "nasc": "2012-08-04", "nasc_fmt": "04/08/2012", "educacenso": "169004572588", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA SAMUEL ENDLER - 10, JARDIM ALVORADA ZS - SAO PAULO - SP", "def": ""},
+    {"num": "33", "nome": "SOPHIA FERREIRA DE OLIVEIRA", "ra": "000115050381", "ra_dig": "6", "ra_uf": "SP", "nasc": "2012-05-22", "nasc_fmt": "22/05/2012", "educacenso": "130524349850", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA WILSON RIBEIRO BONFIM - 305, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "34", "nome": "THAIS DOS SANTOS COSTA", "ra": "000115706607", "ra_dig": "0", "ra_uf": "SP", "nasc": "2013-01-17", "nasc_fmt": "17/01/2013", "educacenso": "169004741282", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA JOSE NEVES - 1122, VILA SAO PAULO - SAO PAULO - SP", "def": ""},
+    {"num": "35", "nome": "TIAGO GADELHA CHABUH", "ra": "000112939906", "ra_dig": "0", "ra_uf": "SP", "nasc": "2012-04-14", "nasc_fmt": "14/04/2012", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA MARIA DO CARMO BORBA ARAÚJO - 132, JARDIM LOS ANGELES - SAO PAULO - SP", "def": ""},
+    {"num": "36", "nome": "YASMIN FIALHO ARAUJO VIEIRA", "ra": "000113506355", "ra_dig": "2", "ra_uf": "SP", "nasc": "2013-01-11", "nasc_fmt": "11/01/2013", "educacenso": "125264878624", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA WILSON RIBEIRO BONFIM - 94, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "37", "nome": "KEVIN MIGUEL DOS SANTOS FREITAS", "ra": "000113847343", "ra_dig": "1", "ra_uf": "SP", "nasc": "2012-10-28", "nasc_fmt": "28/10/2012", "educacenso": "124928489143", "mat_inicio": "01/04/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "TRAVESSA ANA DE JESUS FERREIRA - 1, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "38", "nome": "LORENA FREIRE ALVES", "ra": "000115262997", "ra_dig": "9", "ra_uf": "SP", "nasc": "2012-04-07", "nasc_fmt": "07/04/2012", "educacenso": "130523779657", "mat_inicio": "10/06/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA JEAN GABRIEL VILLIN - 337, AMERICANÓPOLIS - SAO PAULO - SP", "def": ""},
   ],
-  '8B': [
-    {num:'1',nome:'AGHATA BEATRIZ CARDOSO DE CARVALHO'},
-    {num:'2',nome:'ANA ALICE OLIVEIRA SANTOS'},
-    {num:'3',nome:'ANA CAROLINA VASCONCELOS'},
-    {num:'4',nome:'BRYAN BRENDON DALESSIO FIGUEIRA SOKOLOWSKI'},
-    {num:'5',nome:'DANIELLA FERNANDA ANDRADE ROCHA'},
-    {num:'6',nome:'EMANUELLY ALPANHEZ TSEI'},
-    {num:'7',nome:'GABRIELLA AYNARA SANTANA DE ALMEIDA'},
-    {num:'8',nome:'GEOVANNA SANTANA BARBOSA'},
-    {num:'9',nome:'GIOVANA EDUARDA FERREIRA BENTO'},
-    {num:'10',nome:'ISABELLY BONFIM DOS SANTOS SANTANA LIMA'},
-    {num:'11',nome:'JOHNATHAN DA SILVA SANTOS'},
-    {num:'12',nome:'KAREN VITÓRIA DE CAMPOS HILÁRIO'},
-    {num:'13',nome:'KARMEN GABRIELLY DE SOUZA LUNA LIMA'},
-    {num:'14',nome:'KAUÊ DAVI MACEDO SOUSA'},
-    {num:'15',nome:'KEZIA ALEXANDRINO DOS SANTOS'},
-    {num:'16',nome:'LARÍSSA CORDEIRO OLIVEIRA'},
-    {num:'17',nome:'LAVÍNIA GOIS FACHINI'},
-    {num:'18',nome:'LIVIA SALDANHA PINHO'},
-    {num:'19',nome:'LUAN DE CASTRO SILVA'},
-    {num:'20',nome:'LUAN SILVA BATISTA DE OLIVEIRA'},
-    {num:'21',nome:'LUIZ PINTO DA SILVA NETO'},
-    {num:'22',nome:'LUIZA GABRIELLA RAMOS COSTA BARRA'},
-    {num:'23',nome:'MARIA EDUARDA LEANDRO XAVIER DA SILVA'},
-    {num:'24',nome:'MELISSA GABRIELLE DA SILVA VOCE'},
-    {num:'25',nome:'MURILO GUERRA CAMACHO'},
-    {num:'26',nome:'NATIÉLY DE ALMEIDA'},
-    {num:'27',nome:'PAOLA LIRA MACIEL'},
-    {num:'28',nome:'PEDRO HENRIQUE BATISTA DE ANDRADE'},
-    {num:'29',nome:'RENAN GROSS COMIN MAGALHÃES'},
-    {num:'30',nome:'RIAN BRIAN SILVA DE PAIVA'},
-    {num:'31',nome:'SARAH LOURDES PEREIRA ALVES'},
-    {num:'32',nome:'SOPHIA DE SÁ SOUSA'},
-    {num:'33',nome:'SOPHIA LUCAS BIGLIA SILVA'},
-    {num:'34',nome:'YASMIM MARINHO MOTA'},
-    {num:'35',nome:'MARIA EDUARDA ALMEIDA ABREU'},
-    {num:'36',nome:'SAMUEL ANTHONY INACIO DE ARAUJO'},
-    {num:'37',nome:'CARLOS PIETRO BACINE DA SILVA'},
-    {num:'38',nome:'ARTHUR BRAGA DOS SANTOS SOUSA'}
+  "8B":[
+    {"num": "1", "nome": "AGHATA BEATRIZ CARDOSO DE CARVALHO", "ra": "000114697154", "ra_dig": "0", "ra_uf": "SP", "nasc": "2013-11-05", "nasc_fmt": "05/11/2013", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA TOMÁS TEIXEIRA - 662, VILA CONSTANÇA - SAO PAULO - SP", "def": ""},
+    {"num": "2", "nome": "ANA ALICE OLIVEIRA SANTOS", "ra": "000114669937", "ra_dig": "2", "ra_uf": "SP", "nasc": "2011-09-09", "nasc_fmt": "09/09/2011", "educacenso": "128243194290", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "TRAVESSA SANTO ANTONINO - 22, AMERICANÓPOLIS - SAO PAULO - SP", "def": ""},
+    {"num": "3", "nome": "ANA CAROLINA VASCONCELOS", "ra": "000113503696", "ra_dig": "2", "ra_uf": "SP", "nasc": "2013-02-15", "nasc_fmt": "15/02/2013", "educacenso": "125269976900", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA CARLO CARRA - 635, VILA SANTA CATARINA - SAO PAULO - SP", "def": ""},
+    {"num": "4", "nome": "BRYAN BRENDON DALESSIO FIGUEIRA SOKOLOWSKI", "ra": "000113500306", "ra_dig": "3", "ra_uf": "SP", "nasc": "2012-01-26", "nasc_fmt": "26/01/2012", "educacenso": "125269959495", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "OSSIAN TERCEIRO TELES - 582, JARDIM PRUDENCIA - SAO PAULO - SP", "def": ""},
+    {"num": "5", "nome": "DANIELLA FERNANDA ANDRADE ROCHA", "ra": "000116660970", "ra_dig": "4", "ra_uf": "SP", "nasc": "2012-11-22", "nasc_fmt": "22/11/2012", "educacenso": "144856257969", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "R VICENTE PEREIRA DE ASSUNCAO - 151, VL CONSTANCA - SAO PAULO - SP", "def": ""},
+    {"num": "6", "nome": "GABRIELLA AYNARA SANTANA DE ALMEIDA", "ra": "000113878465", "ra_dig": "5", "ra_uf": "SP", "nasc": "2012-05-03", "nasc_fmt": "03/05/2012", "educacenso": "124986342079", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA CALIL ABUTARA - 244, VILA DO CASTELO - SAO PAULO - SP", "def": ""},
+    {"num": "7", "nome": "GEOVANNA SANTANA BARBOSA", "ra": "000115854052", "ra_dig": "8", "ra_uf": "SP", "nasc": "2012-08-02", "nasc_fmt": "02/08/2012", "educacenso": "169004741100", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA ANTONIO FOGAL - 111, JD UMUARAMA - SAO PAULO - SP", "def": ""},
+    {"num": "8", "nome": "GIOVANA EDUARDA FERREIRA BENTO", "ra": "000115451739", "ra_dig": "1", "ra_uf": "SP", "nasc": "2012-08-05", "nasc_fmt": "05/08/2012", "educacenso": "130523808428", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA FRANCISCO FELIPPE AGOSTI - 80, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "9", "nome": "ISABELLY BONFIM DOS SANTOS SANTANA LIMA", "ra": "000114075998", "ra_dig": "X", "ra_uf": "SP", "nasc": "2012-09-25", "nasc_fmt": "25/09/2012", "educacenso": "125275296150", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA FERNÃO LOPES - 385, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "10", "nome": "JOHNATHAN DA SILVA SANTOS", "ra": "000114844137", "ra_dig": "2", "ra_uf": "SP", "nasc": "2012-05-31", "nasc_fmt": "31/05/2012", "educacenso": "128242700477", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA DOUTOR JOSE VICENTE DE BARROS FILHO - 40, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "11", "nome": "KAUÊ DAVI MACEDO SOUSA", "ra": "000115468369", "ra_dig": "2", "ra_uf": "SP", "nasc": "2012-11-12", "nasc_fmt": "12/11/2012", "educacenso": "130532577182", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA ANTÔNIO ALVES TEIXEIRA - 377, JARDIM JABAQUARA - SAO PAULO - SP", "def": ""},
+    {"num": "12", "nome": "KEZIA ALEXANDRINO DOS SANTOS", "ra": "000113304987", "ra_dig": "4", "ra_uf": "SP", "nasc": "2012-04-18", "nasc_fmt": "18/04/2012", "educacenso": "124168536865", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "R JOSÉ MORENO - 69, VILA SANTA CATARINA - SAO PAULO - SP", "def": ""},
+    {"num": "13", "nome": "LARÍSSA CORDEIRO OLIVEIRA", "ra": "000115188539", "ra_dig": "3", "ra_uf": "SP", "nasc": "2012-09-01", "nasc_fmt": "01/09/2012", "educacenso": "130523800958", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA RAUL MARQUES MARINHO - 404, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "14", "nome": "LAVÍNIA GOIS FACHINI", "ra": "000116547303", "ra_dig": "3", "ra_uf": "SP", "nasc": "2012-12-03", "nasc_fmt": "03/12/2012", "educacenso": "175742763580", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "R FILOMENA MARIA DE JESUS - 166, JD ALZIRA - SAO PAULO - SP", "def": ""},
+    {"num": "15", "nome": "LIVIA SALDANHA PINHO", "ra": "000116234552", "ra_dig": "4", "ra_uf": "SP", "nasc": "2012-05-09", "nasc_fmt": "09/05/2012", "educacenso": "169004572901", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA RAUL MARQUES MARINHO - 479, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "16", "nome": "LUAN DE CASTRO SILVA", "ra": "000113483894", "ra_dig": "3", "ra_uf": "SP", "nasc": "2013-01-18", "nasc_fmt": "18/01/2013", "educacenso": "125276133815", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA ANTONIO FOGAL - 18, JD UMUARAMA - SAO PAULO - SP", "def": ""},
+    {"num": "17", "nome": "LUAN SILVA BATISTA DE OLIVEIRA", "ra": "000112850403", "ra_dig": "0", "ra_uf": "SP", "nasc": "2011-06-08", "nasc_fmt": "08/06/2011", "educacenso": "", "mat_inicio": "17/03/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA HERIBERTO SIMÕES DO VALLE - 109, JARDIM LOS ANGELES - SAO PAULO - SP", "def": "INTELECTUAL"},
+    {"num": "18", "nome": "LUIZ PINTO DA SILVA NETO", "ra": "000113295236", "ra_dig": "0", "ra_uf": "SP", "nasc": "2012-07-18", "nasc_fmt": "18/07/2012", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA DEPUTADO MARTINHO RODRIGUES - 246, CHACARA MONTE ALEGRE - SAO PAULO - SP", "def": ""},
+    {"num": "19", "nome": "MARIA EDUARDA LEANDRO XAVIER DA SILVA", "ra": "000114077313", "ra_dig": "6", "ra_uf": "SP", "nasc": "2012-10-11", "nasc_fmt": "11/10/2012", "educacenso": "125276131600", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA JOSÉ ANTÔNIO MARTINS - 257 B, VILA SÃO PAULO - SAO PAULO - SP", "def": ""},
+    {"num": "20", "nome": "MELISSA GABRIELLE DA SILVA VOCE", "ra": "000115704278", "ra_dig": "8", "ra_uf": "SP", "nasc": "2012-10-23", "nasc_fmt": "23/10/2012", "educacenso": "130268288746", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA CARLO CARRA - 635, VILA SANTA CATARINA - SAO PAULO - SP", "def": ""},
+    {"num": "21", "nome": "MURILO GUERRA CAMACHO", "ra": "000113897958", "ra_dig": "2", "ra_uf": "SP", "nasc": "2012-05-28", "nasc_fmt": "28/05/2012", "educacenso": "125039399102", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA JACATIRÃO - 585, CHÁCARA MONTE ALEGRE - SAO PAULO - SP", "def": ""},
+    {"num": "22", "nome": "NATIÉLY DE ALMEIDA", "ra": "000115767270", "ra_dig": "X", "ra_uf": "SP", "nasc": "2013-04-21", "nasc_fmt": "21/04/2013", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA FRANCISCO TELES DOURADO - 368, JARDIM PRUDÊNCIA - SAO PAULO - SP", "def": ""},
+    {"num": "23", "nome": "PAOLA LIRA MACIEL", "ra": "000116679951", "ra_dig": "7", "ra_uf": "SP", "nasc": "2013-01-04", "nasc_fmt": "04/01/2013", "educacenso": "130116494130", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA VICENTE PEREIRA DE ASSUNÇÃO - 431, VILA CONSTANÇA - SAO PAULO - SP", "def": ""},
+    {"num": "24", "nome": "PEDRO HENRIQUE BATISTA DE ANDRADE", "ra": "000114709097", "ra_dig": "X", "ra_uf": "SP", "nasc": "2013-02-10", "nasc_fmt": "10/02/2013", "educacenso": "128242728304", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA SILVIO ESTEVES - 167, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "25", "nome": "RENAN GROSS COMIN MAGALHÃES", "ra": "000114409449", "ra_dig": "5", "ra_uf": "SP", "nasc": "2013-03-03", "nasc_fmt": "03/03/2013", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA ALTO DO BONFIM - 448, CONJUNTO RESIDENCIAL JARDIM CANAÃ - SAO PAULO - SP", "def": ""},
+    {"num": "26", "nome": "RIAN BRIAN SILVA DE PAIVA", "ra": "000114962641", "ra_dig": "0", "ra_uf": "SP", "nasc": "2012-12-25", "nasc_fmt": "25/12/2012", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA IPAOBI - 137, VILA BABILÔNIA - SAO PAULO - SP", "def": ""},
+    {"num": "27", "nome": "SARAH LOURDES PEREIRA ALVES", "ra": "000115155055", "ra_dig": "3", "ra_uf": "SP", "nasc": "2013-03-15", "nasc_fmt": "15/03/2013", "educacenso": "130524014913", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA HONORINDA JOSEFA DA SILVA - 144, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "28", "nome": "SOPHIA DE SÁ SOUSA", "ra": "000115275244", "ra_dig": "3", "ra_uf": "SP", "nasc": "2013-03-23", "nasc_fmt": "23/03/2013", "educacenso": "130523801091", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA JOSÉ NEVES - 143, VILA SÃO PAULO - SAO PAULO - SP", "def": ""},
+    {"num": "29", "nome": "SOPHIA LUCAS BIGLIA SILVA", "ra": "000113490629", "ra_dig": "8", "ra_uf": "SP", "nasc": "2012-08-29", "nasc_fmt": "29/08/2012", "educacenso": "125275940342", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA FREI JOAO DO ROSARIO - 590, VILA MARARI - SAO PAULO - SP", "def": ""},
+    {"num": "30", "nome": "YASMIM MARINHO MOTA", "ra": "000114077308", "ra_dig": "2", "ra_uf": "SP", "nasc": "2012-06-05", "nasc_fmt": "05/06/2012", "educacenso": "125276131448", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA LEONIDAS MOREIRA - 100, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "31", "nome": "MARIA EDUARDA ALMEIDA ABREU", "ra": "000114474733", "ra_dig": "8", "ra_uf": "SP", "nasc": "2012-09-21", "nasc_fmt": "21/09/2012", "educacenso": "128264803597", "mat_inicio": "06/04/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA DAS FLECHAS - 484, JARDIM PRUDÊNCIA - SAO PAULO - SP", "def": ""},
+    {"num": "32", "nome": "SAMUEL ANTHONY INACIO DE ARAUJO", "ra": "000114710133", "ra_dig": "4", "ra_uf": "SP", "nasc": "2013-01-25", "nasc_fmt": "25/01/2013", "educacenso": "128242727910", "mat_inicio": "14/04/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA LEÔNIDAS MOREIRA - 215, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "33", "nome": "CARLOS PIETRO BACINE DA SILVA", "ra": "000115328240", "ra_dig": "9", "ra_uf": "SP", "nasc": "2012-06-09", "nasc_fmt": "09/06/2012", "educacenso": "130520968696", "mat_inicio": "22/04/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "Travessa Pedro Ermini - 104, Santo Amaro - SAO PAULO - SP", "def": ""},
+    {"num": "34", "nome": "ARTHUR BRAGA DOS SANTOS SOUSA", "ra": "000115279260", "ra_dig": "X", "ra_uf": "SP", "nasc": "2012-03-06", "nasc_fmt": "06/03/2012", "educacenso": "130537064906", "mat_inicio": "13/05/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "Rua Wilson Ribeiro Bonfim - 94, Vila Inglesa - SAO PAULO - SP", "def": ""},
+    {"num": "35", "nome": "CAIO SANTOS DEMICHILI", "ra": "000113479757", "ra_dig": "6", "ra_uf": "SP", "nasc": "2013-01-02", "nasc_fmt": "02/01/2013", "educacenso": "", "mat_inicio": "22/07/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA DOUTOR UBALDO FRANCO CAIUBI - 230, VILA SÃO PAULO - SAO PAULO - SP", "def": ""},
   ],
-  '8C': [
-    {num:'1',nome:'AGATHA TEODORO PANIQUAR LOTERIO'},
-    {num:'2',nome:'ALICE DE SOUZA SANTOS SILVA'},
-    {num:'3',nome:'ANA LAURA DE ARAUJO CALIXTO'},
-    {num:'4',nome:'ARTHUR TAVARES OLIVEIRA'},
-    {num:'5',nome:'BEATRIZ SÁ TELES FERREIRA'},
-    {num:'6',nome:'CALVIN SOUJI SANTANA LOPES'},
-    {num:'7',nome:'CAMILLY CESCONETTO MARTINS'},
-    {num:'8',nome:'DAVI LUCCA GALDINO FERREIRA'},
-    {num:'9',nome:'DEBORA NASCIMENTO CARDOSO DE SÁ'},
-    {num:'10',nome:'GABRIEL SANTOS MENDES'},
-    {num:'11',nome:'GEOVANNA MICKAELLE DE ANDRADE MOURA'},
-    {num:'12',nome:'HENRIQUE RODRIGUES DA SILVA'},
-    {num:'13',nome:'JULIA REBOUÇAS DA LUZ'},
-    {num:'14',nome:'KAROLLINY MARQUES ALVES'},
-    {num:'15',nome:'KAUÊ RAFAEL RODRIGUES DE MENEZES'},
-    {num:'16',nome:'LEONARDO MENDES QUEIROZ'},
-    {num:'17',nome:'LORENA SODRE BERTUNES'},
-    {num:'18',nome:'MANUELA CAMARGO OLIVEIRA'},
-    {num:'19',nome:'MARCIO RYAN SOARES DA CONCEIÇÃO'},
-    {num:'20',nome:'MARIA ALICE LOPES DE SOUZA'},
-    {num:'21',nome:'MARIA EDUARDA PAIXÃO SOUZA'},
-    {num:'22',nome:'MARIANA NAOMY DE ALMEIDA SANTOS'},
-    {num:'23',nome:'MIGUEL RAVAGNANI'},
-    {num:'24',nome:'MIRELLA PEREIRA REIS'},
-    {num:'25',nome:'PEDRO LUÍS JAPONA BARBOSA'},
-    {num:'26',nome:'PEDRO NOVAIS DIAS'},
-    {num:'27',nome:'PIETRO GOMES ARAUJO'},
-    {num:'28',nome:'RAPHAELL EMERSON DE SOUZA NASCIMENTO'},
-    {num:'29',nome:'SOFIA MANOELA DOS SANTOS PEREIRA'},
-    {num:'30',nome:'SOPHIA CLARINDO FEITOSA DA CRUZ'},
-    {num:'31',nome:'TALLES DA SILVA SANTOS'},
-    {num:'32',nome:'THAYSSA RODRIGUES DA SILVA'},
-    {num:'33',nome:'VITOR MANOEL GUIMARÃES BONFIM'},
-    {num:'34',nome:'YURI MARCONDES DA SILVA'},
-    {num:'35',nome:'LÍVIA LIMA CARDOSO'},
-    {num:'36',nome:'JOÃO RAFAEL ZONTA ARAÚJO'},
-    {num:'37',nome:'YASMIN APARECIDA DE SOUZA SILVA'}
+  "8C":[
+    {"num": "1", "nome": "AGATHA TEODORO PANIQUAR LOTERIO", "ra": "000115497588", "ra_dig": "5", "ra_uf": "SP", "nasc": "2013-01-11", "nasc_fmt": "11/01/2013", "educacenso": "128233011001", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA BARÃO DE SANTA MARTA - 599, VILA SANTA CATARINA - SAO PAULO - SP", "def": ""},
+    {"num": "2", "nome": "ALICE DE SOUZA SANTOS SILVA", "ra": "000113508757", "ra_dig": "X", "ra_uf": "SP", "nasc": "2013-02-14", "nasc_fmt": "14/02/2013", "educacenso": "125275631200", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA COMENDADOR ALFAIA RODRIGUES - 166, JARDIM JABAQUARA - SAO PAULO - SP", "def": ""},
+    {"num": "3", "nome": "ANA LAURA DE ARAUJO CALIXTO", "ra": "000114478200", "ra_dig": "4", "ra_uf": "SP", "nasc": "2012-06-11", "nasc_fmt": "11/06/2012", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA JOÃO SCATAMACCHIA - 267, VILA CAMPO GRANDE - SAO PAULO - SP", "def": ""},
+    {"num": "4", "nome": "ARTHUR TAVARES OLIVEIRA", "ra": "000115727098", "ra_dig": "0", "ra_uf": "SP", "nasc": "2013-03-19", "nasc_fmt": "19/03/2013", "educacenso": "130524015642", "mat_inicio": "03/03/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA BARÃO DE AZEVEDO MACHADO - 276, JARDIM PRUDÊNCIA - SAO PAULO - SP", "def": ""},
+    {"num": "5", "nome": "BEATRIZ SÁ TELES FERREIRA", "ra": "000114698513", "ra_dig": "7", "ra_uf": "SP", "nasc": "2013-02-05", "nasc_fmt": "05/02/2013", "educacenso": "128242528046", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "AVENIDA YERVANT KISSAJIKIAN - 3411, AMERICANÓPOLIS - SAO PAULO - SP", "def": ""},
+    {"num": "6", "nome": "CALVIN SOUJI SANTANA LOPES", "ra": "000112672241", "ra_dig": "8", "ra_uf": "SP", "nasc": "2012-04-06", "nasc_fmt": "06/04/2012", "educacenso": "124125814600", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA DOUTOR DJALMA PINHEIRO FRANCO - 343, VILA SANTA CATARINA - SAO PAULO - SP", "def": ""},
+    {"num": "7", "nome": "CAMILLY CESCONETTO MARTINS", "ra": "000113504615", "ra_dig": "3", "ra_uf": "SP", "nasc": "2013-01-16", "nasc_fmt": "16/01/2013", "educacenso": "125275630742", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA JOÃO GOMES BATISTA - 715, JARDIM CIDÁLIA - SAO PAULO - SP", "def": ""},
+    {"num": "8", "nome": "DAVI LUCCA GALDINO FERREIRA", "ra": "000113510280", "ra_dig": "6", "ra_uf": "SP", "nasc": "2012-10-02", "nasc_fmt": "02/10/2012", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA JESUS BORGES GOUVEIA - 63, JARDIM CIDÁLIA - SAO PAULO - SP", "def": ""},
+    {"num": "9", "nome": "DEBORA NASCIMENTO CARDOSO DE SÁ", "ra": "000115460040", "ra_dig": "3", "ra_uf": "SP", "nasc": "2012-12-28", "nasc_fmt": "28/12/2012", "educacenso": "130523802225", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA VITANTONIO DABRIL - 256, JARDIM ALZIRA - SAO PAULO - SP", "def": ""},
+    {"num": "10", "nome": "GABRIEL SANTOS MENDES", "ra": "000116809646", "ra_dig": "7", "ra_uf": "SP", "nasc": "2012-11-09", "nasc_fmt": "09/11/2012", "educacenso": "178667291071", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "TRAVESSA DONA ANA - 37, VILA SÃO PAULO - SAO PAULO - SP", "def": ""},
+    {"num": "11", "nome": "GEOVANNA MICKAELLE DE ANDRADE MOURA", "ra": "000115733118", "ra_dig": "X", "ra_uf": "SP", "nasc": "2012-07-17", "nasc_fmt": "17/07/2012", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA DAS FLECHAS - 735, VILA SANTA CATARINA - SAO PAULO - SP", "def": ""},
+    {"num": "12", "nome": "HENRIQUE RODRIGUES DA SILVA", "ra": "000113500490", "ra_dig": "0", "ra_uf": "SP", "nasc": "2013-02-23", "nasc_fmt": "23/02/2013", "educacenso": "125275309820", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA LADAINHA DO MAR - 300, CIDADE JULIA - SAO PAULO - SP", "def": ""},
+    {"num": "13", "nome": "JULIA REBOUÇAS DA LUZ", "ra": "000116549721", "ra_dig": "9", "ra_uf": "SP", "nasc": "2013-02-19", "nasc_fmt": "19/02/2013", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA JOSÉ NEVES - 448, VILA SÃO PAULO - SAO PAULO - SP", "def": ""},
+    {"num": "14", "nome": "KAROLLINY MARQUES ALVES", "ra": "000113479622", "ra_dig": "5", "ra_uf": "SP", "nasc": "2013-01-19", "nasc_fmt": "19/01/2013", "educacenso": "125276134382", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "R JOSE ANTONIO MARTINS - 329, VL S PAULO - SAO PAULO - SP", "def": ""},
+    {"num": "15", "nome": "KAUÊ RAFAEL RODRIGUES DE MENEZES", "ra": "000113500603", "ra_dig": "9", "ra_uf": "SP", "nasc": "2013-01-17", "nasc_fmt": "17/01/2013", "educacenso": "125276134200", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA MANGUABA - 135, JARDIM UMUARAMA - SAO PAULO - SP", "def": ""},
+    {"num": "16", "nome": "LEONARDO MENDES QUEIROZ", "ra": "000113519116", "ra_dig": "5", "ra_uf": "SP", "nasc": "2011-11-04", "nasc_fmt": "04/11/2011", "educacenso": "125236939924", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA LANNES - 30, VILA MASCOTE - SAO PAULO - SP", "def": ""},
+    {"num": "17", "nome": "LORENA SODRE BERTUNES", "ra": "000115691536", "ra_dig": "3", "ra_uf": "SP", "nasc": "2013-01-05", "nasc_fmt": "05/01/2013", "educacenso": "169004760902", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA ITAPECIRICA DA SERRA - 161, CIDADE ADEMAR - SAO PAULO - SP", "def": ""},
+    {"num": "18", "nome": "MANUELA CAMARGO OLIVEIRA", "ra": "000115471961", "ra_dig": "3", "ra_uf": "SP", "nasc": "2013-02-28", "nasc_fmt": "28/02/2013", "educacenso": "130523808690", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA DOUTOR DJALMA PINHEIRO FRANCO - 1403, VILA SANTA CATARINA - SAO PAULO - SP", "def": ""},
+    {"num": "19", "nome": "MARCIO RYAN SOARES DA CONCEIÇÃO", "ra": "000114482460", "ra_dig": "6", "ra_uf": "SP", "nasc": "2012-05-04", "nasc_fmt": "04/05/2012", "educacenso": "128264278573", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA JÚLIO ANDRÉ CORREIA - 140, JARDIM UMUARAMA - SAO PAULO - SP", "def": ""},
+    {"num": "20", "nome": "MARIA ALICE LOPES DE SOUZA", "ra": "000115065591", "ra_dig": "4", "ra_uf": "SP", "nasc": "2013-02-09", "nasc_fmt": "09/02/2013", "educacenso": "130524336600", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA FRANCISCO FELIPPE AGOSTI - 80, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "21", "nome": "MARIA EDUARDA PAIXÃO SOUZA", "ra": "000115760790", "ra_dig": "1", "ra_uf": "SP", "nasc": "2013-02-24", "nasc_fmt": "24/02/2013", "educacenso": "130532369318", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA DOUTOR UBALDO FRANCO CAIUBI - 313, VILA SÃO PAULO - SAO PAULO - SP", "def": ""},
+    {"num": "22", "nome": "MARIANA NAOMY DE ALMEIDA SANTOS", "ra": "000111690039", "ra_dig": "7", "ra_uf": "SP", "nasc": "2011-06-20", "nasc_fmt": "20/06/2011", "educacenso": "123276298022", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA ELISEU BORGES - 203, MORRO GRANDE - SAO PAULO - SP", "def": ""},
+    {"num": "23", "nome": "MIGUEL RAVAGNANI", "ra": "000115969238", "ra_dig": "5", "ra_uf": "SP", "nasc": "2012-10-16", "nasc_fmt": "16/10/2012", "educacenso": "169004726305", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA MADRE EMILIE DE VILLENEUVE - 152, VILA SANTA CATARINA - SAO PAULO - SP", "def": ""},
+    {"num": "24", "nome": "MIRELLA PEREIRA REIS", "ra": "000115697106", "ra_dig": "8", "ra_uf": "SP", "nasc": "2013-03-08", "nasc_fmt": "08/03/2013", "educacenso": "169005617569", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA VICENTE PEREIRA DE ASSUNÇÃO - 55, VILA CONSTANÇA - SAO PAULO - SP", "def": ""},
+    {"num": "25", "nome": "PEDRO LUÍS JAPONA BARBOSA", "ra": "000113937395", "ra_dig": "X", "ra_uf": "SP", "nasc": "2013-03-12", "nasc_fmt": "12/03/2013", "educacenso": "125026243982", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "Avenida Cupecê - 1874, Cidade Ademar - SAO PAULO - SP", "def": ""},
+    {"num": "26", "nome": "PEDRO NOVAIS DIAS", "ra": "000115373161", "ra_dig": "7", "ra_uf": "SP", "nasc": "2013-03-15", "nasc_fmt": "15/03/2013", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA AJURITIBA - 392, JARDIM ORIENTAL - SAO PAULO - SP", "def": ""},
+    {"num": "27", "nome": "PIETRO GOMES ARAUJO", "ra": "000115833759", "ra_dig": "0", "ra_uf": "SP", "nasc": "2012-08-14", "nasc_fmt": "14/08/2012", "educacenso": "175745938411", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA CHARLES DARWIN - 174, VILA SANTA CATARINA - SAO PAULO - SP", "def": ""},
+    {"num": "28", "nome": "RAPHAELL EMERSON DE SOUZA NASCIMENTO", "ra": "000115562525", "ra_dig": "0", "ra_uf": "SP", "nasc": "2012-09-01", "nasc_fmt": "01/09/2012", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "AVENIDA SÉRGIO LANDULFO FURTADO - 307, JARDIM GUANHEMBU - SAO PAULO - SP", "def": ""},
+    {"num": "29", "nome": "SOFIA MANOELA DOS SANTOS PEREIRA", "ra": "000115291189", "ra_dig": "2", "ra_uf": "SP", "nasc": "2012-10-08", "nasc_fmt": "08/10/2012", "educacenso": "128305312487", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA ARTUR LOBO - 178, JARDIM JABAQUARA - SAO PAULO - SP", "def": ""},
+    {"num": "30", "nome": "SOPHIA CLARINDO FEITOSA DA CRUZ", "ra": "000114515408", "ra_dig": "6", "ra_uf": "SP", "nasc": "2013-02-14", "nasc_fmt": "14/02/2013", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA OSCAR SCHADE - 198, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "31", "nome": "TALLES DA SILVA SANTOS", "ra": "000112597520", "ra_dig": "9", "ra_uf": "SP", "nasc": "2012-01-21", "nasc_fmt": "21/01/2012", "educacenso": "124200084723", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA WILSON RIBEIRO BONFIM - 94, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "32", "nome": "THAYSSA RODRIGUES DA SILVA", "ra": "000116408505", "ra_dig": "0", "ra_uf": "SP", "nasc": "2012-11-28", "nasc_fmt": "28/11/2012", "educacenso": "175707270883", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "AVENIDA INTERLAGOS - 871, JARDIM UMUARAMA - SAO PAULO - SP", "def": ""},
+    {"num": "33", "nome": "VITOR MANOEL GUIMARÃES BONFIM", "ra": "000115404911", "ra_dig": "5", "ra_uf": "SP", "nasc": "2012-10-22", "nasc_fmt": "22/10/2012", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA VENCESLAU DE MORAIS - 08, VILA MARARI - SAO PAULO - SP", "def": ""},
+    {"num": "34", "nome": "YURI MARCONDES DA SILVA", "ra": "000115390292", "ra_dig": "8", "ra_uf": "SP", "nasc": "2013-03-19", "nasc_fmt": "19/03/2013", "educacenso": "130523863100", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "AVENIDA CUPECE - 1877, CIDADE ADEMAR - SAO PAULO - SP", "def": ""},
+    {"num": "35", "nome": "LÍVIA LIMA CARDOSO", "ra": "000115731429", "ra_dig": "6", "ra_uf": "SP", "nasc": "2013-03-24", "nasc_fmt": "24/03/2013", "educacenso": "127489430665", "mat_inicio": "01/04/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA MÁSCULO - 193, VILA SÃO PAULO - SAO PAULO - SP", "def": ""},
+    {"num": "36", "nome": "JOÃO RAFAEL ZONTA ARAÚJO", "ra": "000114785570", "ra_dig": "5", "ra_uf": "SP", "nasc": "2012-08-28", "nasc_fmt": "28/08/2012", "educacenso": "127867952577", "mat_inicio": "12/05/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA NILO TORRES - 290, JARDIM UMUARAMA - SAO PAULO - SP", "def": ""},
+    {"num": "37", "nome": "YASMIN APARECIDA DE SOUZA SILVA", "ra": "000113507334", "ra_dig": "X", "ra_uf": "SP", "nasc": "2012-03-04", "nasc_fmt": "04/03/2012", "educacenso": "", "mat_inicio": "18/05/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA TOMÁS TEIXEIRA - 609, VILA CONSTANCA - SAO PAULO - SP", "def": ""},
   ],
-  '9A': [
-    {num:'1',nome:'ANA BEATRIS ALVES DE SOUZA'},
-    {num:'2',nome:'ANA JÚLIA FREIRE BISPO'},
-    {num:'3',nome:'ANNA BEATRIZ DANTAS'},
-    {num:'4',nome:'BRUNO KIYOTO SOMINAMI COSTA'},
-    {num:'5',nome:'CAUÃ PESSOA LIMA'},
-    {num:'6',nome:'DAVI JOSÉ LIMA SANTOS'},
-    {num:'7',nome:'EDUARDO SANTOS GOMES'},
-    {num:'8',nome:'EMILIANA HELENA JOÃO MANUEL'},
-    {num:'9',nome:'EMILY BEZERRA LOPES'},
-    {num:'10',nome:'GABRIELLE CARMO DE SANTANA'},
-    {num:'11',nome:'GUILHERME DE ALMEIDA SILVA LUIZ'},
-    {num:'12',nome:'HELOISA MARIA DE LIMA SOUZA'},
-    {num:'13',nome:'HENRI GABRIEL RAMOS MUNOZ'},
-    {num:'14',nome:'ISABELLA OLIVEIRA GOMES'},
-    {num:'15',nome:'ISABELLY FÉLIX DE SOUZA RODRIGUES'},
-    {num:'16',nome:'ISADORA DIAS COELHO'},
-    {num:'17',nome:'JOAO GABRIEL FERREIRA MARTINS'},
-    {num:'18',nome:'JOÃO PAULO MARIANO GUIMARÃES BRITO'},
-    {num:'19',nome:'JOAO VICTOR CLAUDIO BALDOINO'},
-    {num:'20',nome:'JULIANA SANTOS DE SOUZA'},
-    {num:'21',nome:'LAURA DOS SANTOS MARGELLI'},
-    {num:'22',nome:'LEONARDO SANTOS GOMES'},
-    {num:'23',nome:'MALLU SARAIVA DE SOUZA'},
-    {num:'24',nome:'MANUELA BONFIM MACEDO'},
-    {num:'25',nome:'MARCELA SILVA LEITE'},
-    {num:'26',nome:'MARIANA FERREIRA DE CARVALHO PAPA'},
-    {num:'27',nome:'MATHEUS HENRIQUE PONTES COSTA'},
-    {num:'28',nome:'MELISSA DINIZ MELLO SCHPARRINGER'},
-    {num:'29',nome:'MELVIN OGHENEOUO CAVALCANTE EJUONE'},
-    {num:'30',nome:'MIGUEL LIMA CARVALHO'},
-    {num:'31',nome:'OTAVIO DE ALMEIDA SILVA LUIZ'},
-    {num:'32',nome:'PEDRO HENRIQUE PEREIRA DA SILVA'},
-    {num:'33',nome:'PHELLIPE SANTOS DA SILVA'},
-    {num:'34',nome:'THIAGO RIBEIRO LIMA'},
-    {num:'35',nome:'THIEGO SOARES SILVA'},
-    {num:'36',nome:'VICTOR ALMEIDA SANTOS'},
-    {num:'37',nome:'VICTOR GABRIEL DE CASTRO SOUZA'},
-    {num:'38',nome:'MARIA FERNANDA ALVES CAIRES'},
-    {num:'39',nome:'ARTHUR APARECIDO MARQUES COSTA VITALINO'}
+  "9A":[
+    {"num": "1", "nome": "ANA BEATRIS ALVES DE SOUZA", "ra": "000112596868", "ra_dig": "0", "ra_uf": "SP", "nasc": "2010-11-25", "nasc_fmt": "25/11/2010", "educacenso": "124125170028", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA RISHIN MATSUDA - 188, VILA SANTA CATARINA - SAO PAULO - SP", "def": ""},
+    {"num": "2", "nome": "ANA JÚLIA FREIRE BISPO", "ra": "000116562419", "ra_dig": "9", "ra_uf": "SP", "nasc": "2012-01-10", "nasc_fmt": "10/01/2012", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA SEBASTOPOL - 42, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "3", "nome": "ANNA BEATRIZ DANTAS", "ra": "000113537448", "ra_dig": "X", "ra_uf": "SP", "nasc": "2011-07-21", "nasc_fmt": "21/07/2011", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA WILSON RIBEIRO BONFIM - 94, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "4", "nome": "BRUNO KIYOTO SOMINAMI COSTA", "ra": "000112587896", "ra_dig": "4", "ra_uf": "SP", "nasc": "2012-02-26", "nasc_fmt": "26/02/2012", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA JOSÉ ANTÔNIO MARTINS - 03, VILA SÃO PAULO - SAO PAULO - SP", "def": ""},
+    {"num": "5", "nome": "CAUÃ PESSOA LIMA", "ra": "000114590020", "ra_dig": "3", "ra_uf": "SP", "nasc": "2011-05-22", "nasc_fmt": "22/05/2011", "educacenso": "128242949815", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "YERVANT KISSAJIKIAN - 299, VILA CONSTANCA - SAO PAULO - SP", "def": ""},
+    {"num": "6", "nome": "DAVI JOSÉ LIMA SANTOS", "ra": "000125897648", "ra_dig": "1", "ra_uf": "SP", "nasc": "2011-06-06", "nasc_fmt": "06/06/2011", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA SÍLVIO ESTEVES - 103, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "7", "nome": "EDUARDO SANTOS GOMES", "ra": "000115433922", "ra_dig": "1", "ra_uf": "SP", "nasc": "2011-03-26", "nasc_fmt": "26/03/2011", "educacenso": "128242496179", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA ANTÔNIO DA SILVA LOBO JÚNIOR - 268, CIDADE DOMITILA - SAO PAULO - SP", "def": ""},
+    {"num": "8", "nome": "EMILIANA HELENA JOÃO MANUEL", "ra": "000124537147", "ra_dig": "2", "ra_uf": "SP", "nasc": "2010-05-02", "nasc_fmt": "02/05/2010", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "AVENIDA INTERLAGOS - 295, JARDIM MARAJOARA - SAO PAULO - SP", "def": ""},
+    {"num": "9", "nome": "EMILY BEZERRA LOPES", "ra": "000112622565", "ra_dig": "4", "ra_uf": "SP", "nasc": "2012-01-12", "nasc_fmt": "12/01/2012", "educacenso": "130523371305", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA DOUTOR GOMES FERRAZ - 176, VILA PEREIRA BARRETO - SAO PAULO - SP", "def": ""},
+    {"num": "10", "nome": "GABRIELLE CARMO DE SANTANA", "ra": "000113500913", "ra_dig": "2", "ra_uf": "SP", "nasc": "2012-01-11", "nasc_fmt": "11/01/2012", "educacenso": "125269959223", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA ANTÔNIO FOGAL - 77, JARDIM UMUARAMA - SAO PAULO - SP", "def": ""},
+    {"num": "11", "nome": "GUILHERME DE ALMEIDA SILVA LUIZ", "ra": "000113505603", "ra_dig": "1", "ra_uf": "SP", "nasc": "2011-04-29", "nasc_fmt": "29/04/2011", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA GUILHERME GAMA - 65, JARDIM SANTO ANTONINHO - SAO PAULO - SP", "def": ""},
+    {"num": "12", "nome": "HELOISA MARIA DE LIMA SOUZA", "ra": "000114403729", "ra_dig": "3", "ra_uf": "SP", "nasc": "2011-08-18", "nasc_fmt": "18/08/2011", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "AVENIDA YERVANT KISSAJIKIAN - 602, VILA CONSTANCA - SAO PAULO - SP", "def": ""},
+    {"num": "13", "nome": "HENRI GABRIEL RAMOS MUNOZ", "ra": "000112523797", "ra_dig": "1", "ra_uf": "SP", "nasc": "2011-12-30", "nasc_fmt": "30/12/2011", "educacenso": "124126215270", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA ARTUR LOBO - 109, JARDIM JABAQUARA - SAO PAULO - SP", "def": ""},
+    {"num": "14", "nome": "ISABELLA OLIVEIRA GOMES", "ra": "000114865764", "ra_dig": "2", "ra_uf": "SP", "nasc": "2012-01-15", "nasc_fmt": "15/01/2012", "educacenso": "128112592879", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA CHARLES DARWIN - 02, VILA SANTA CATARINA - SAO PAULO - SP", "def": ""},
+    {"num": "15", "nome": "ISABELLY FÉLIX DE SOUZA RODRIGUES", "ra": "000113494541", "ra_dig": "3", "ra_uf": "SP", "nasc": "2011-08-16", "nasc_fmt": "16/08/2011", "educacenso": "125270262656", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA KAREL BURIAN - 202, VILA DO CASTELO - SAO PAULO - SP", "def": ""},
+    {"num": "16", "nome": "ISADORA DIAS COELHO", "ra": "000114495620", "ra_dig": "1", "ra_uf": "SP", "nasc": "2011-11-09", "nasc_fmt": "09/11/2011", "educacenso": "130523567803", "mat_inicio": "25/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA SELMA KURTZ - 68, JARDIM MARIA LUIZA - SAO PAULO - SP", "def": ""},
+    {"num": "17", "nome": "JOÃO GABRIEL FERREIRA MARTINS", "ra": "000115336421", "ra_dig": "9", "ra_uf": "SP", "nasc": "2011-10-18", "nasc_fmt": "18/10/2011", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA JÚLIO ANDRÉ CORREIA - 62, JARDIM UMUARAMA - SAO PAULO - SP", "def": ""},
+    {"num": "18", "nome": "JOÃO PAULO MARIANO GUIMARÃES BRITO", "ra": "000114509462", "ra_dig": "4", "ra_uf": "SP", "nasc": "2011-11-04", "nasc_fmt": "04/11/2011", "educacenso": "128243223818", "mat_inicio": "12/03/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA ALTO DO BONFIM - 288, CONJUNTO RESIDENCIAL JARDIM CANAÃ - SAO PAULO - SP", "def": ""},
+    {"num": "19", "nome": "JOÃO VICTOR CLAUDIO BALDOINO", "ra": "000113310950", "ra_dig": "0", "ra_uf": "SP", "nasc": "2011-05-16", "nasc_fmt": "16/05/2011", "educacenso": "124169152580", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "R JOSE ANTONIO MARTINS - 293, VL S PAULO - SAO PAULO - SP", "def": ""},
+    {"num": "20", "nome": "JULIANA SANTOS DE SOUZA", "ra": "000112614122", "ra_dig": "7", "ra_uf": "SP", "nasc": "2011-08-31", "nasc_fmt": "31/08/2011", "educacenso": "124169016563", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA LUCINDO DOS PASSOS - 128, JARDIM PRUDÊNCIA - SAO PAULO - SP", "def": ""},
+    {"num": "21", "nome": "LAURA DOS SANTOS MARGELLI", "ra": "000113305652", "ra_dig": "0", "ra_uf": "SP", "nasc": "2011-09-09", "nasc_fmt": "09/09/2011", "educacenso": "125267562865", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA ADOLFO CASAIS MONTEIRO - 585, VILA NOVA CALEDÔNIA - SAO PAULO - SP", "def": ""},
+    {"num": "22", "nome": "LEONARDO SANTOS GOMES", "ra": "000115434168", "ra_dig": "9", "ra_uf": "SP", "nasc": "2011-03-26", "nasc_fmt": "26/03/2011", "educacenso": "128242496098", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA ANTÔNIO DA SILVA LOBO JÚNIOR - 268, CIDADE DOMITILA - SAO PAULO - SP", "def": ""},
+    {"num": "23", "nome": "MALLU SARAIVA DE SOUZA", "ra": "000116664172", "ra_dig": "7", "ra_uf": "SP", "nasc": "2012-01-04", "nasc_fmt": "04/01/2012", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "AVENIDA INTERLAGOS - 1601, JARDIM UMUARAMA - SAO PAULO - SP", "def": ""},
+    {"num": "24", "nome": "MANUELA BONFIM MACEDO", "ra": "000114348325", "ra_dig": "X", "ra_uf": "SP", "nasc": "2012-02-10", "nasc_fmt": "10/02/2012", "educacenso": "128085576391", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA ITACURUCA - 330, VL STA CATARINA - SAO PAULO - SP", "def": ""},
+    {"num": "25", "nome": "MARCELA SILVA LEITE", "ra": "000121832023", "ra_dig": "0", "ra_uf": "SP", "nasc": "2011-05-06", "nasc_fmt": "06/05/2011", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA DOUTOR RUBENS DE AZEVEDO MARQUES - 277, CHÁCARA MONTE ALEGRE - SAO PAULO - SP", "def": ""},
+    {"num": "26", "nome": "MARIANA FERREIRA DE CARVALHO PAPA", "ra": "000115349040", "ra_dig": "7", "ra_uf": "SP", "nasc": "2012-02-02", "nasc_fmt": "02/02/2012", "educacenso": "175488016103", "mat_inicio": "03/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA FRANKLIN MAGALHÃES - 834, VILA SANTA CATARINA - SAO PAULO - SP", "def": ""},
+    {"num": "27", "nome": "MATHEUS HENRIQUE PONTES COSTA", "ra": "000115262299", "ra_dig": "7", "ra_uf": "SP", "nasc": "2011-08-20", "nasc_fmt": "20/08/2011", "educacenso": "130536451574", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA MANGUABA - 292, JARDIM UMUARAMA - SAO PAULO - SP", "def": ""},
+    {"num": "28", "nome": "MELISSA DINIZ MELLO SCHPARRINGER", "ra": "000111690034", "ra_dig": "8", "ra_uf": "SP", "nasc": "2011-05-16", "nasc_fmt": "16/05/2011", "educacenso": "127461781765", "mat_inicio": "16/03/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA LEÔNIDAS MOREIRA - 150, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "29", "nome": "MELVIN OGHENEOUO CAVALCANTE EJUONE", "ra": "000112549176", "ra_dig": "0", "ra_uf": "SP", "nasc": "2012-01-05", "nasc_fmt": "05/01/2012", "educacenso": "124168277231", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA RAUL MARQUES MARINHO - 519, VILA I INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "30", "nome": "MIGUEL LIMA CARVALHO", "ra": "000113476943", "ra_dig": "X", "ra_uf": "SP", "nasc": "2011-10-11", "nasc_fmt": "11/10/2011", "educacenso": "126077096872", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "JOAO BARRETO DE MENEZES - 983, VILA SANTA CATARINA - SAO PAULO - SP", "def": ""},
+    {"num": "31", "nome": "OTAVIO DE ALMEIDA SILVA LUIZ", "ra": "000113505615", "ra_dig": "8", "ra_uf": "SP", "nasc": "2011-04-29", "nasc_fmt": "29/04/2011", "educacenso": "125265205682", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA GUILHERME GAMA - 65, JARDIM SANTO ANTONINHO - SAO PAULO - SP", "def": ""},
+    {"num": "32", "nome": "PEDRO HENRIQUE PEREIRA DA SILVA", "ra": "000111707119", "ra_dig": "4", "ra_uf": "SP", "nasc": "2011-06-30", "nasc_fmt": "30/06/2011", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "AVENIDA ARESTÓTELES COSTA PINTO - 961, JARDIM DOS BICHINHOS - SAO PAULO - SP", "def": ""},
+    {"num": "33", "nome": "PHELLIPE SANTOS DA SILVA", "ra": "000115426450", "ra_dig": "6", "ra_uf": "SP", "nasc": "2011-07-09", "nasc_fmt": "09/07/2011", "educacenso": "130523568958", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "AVENIDA CUPECÊ - 1846, CIDADE ADEMAR - SAO PAULO - SP", "def": ""},
+    {"num": "34", "nome": "THIAGO RIBEIRO LIMA", "ra": "000113307638", "ra_dig": "5", "ra_uf": "SP", "nasc": "2011-07-21", "nasc_fmt": "21/07/2011", "educacenso": "125275382749", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "AVENIDA CUPECÊ - 1846, CIDADE ADEMAR - SAO PAULO - SP", "def": ""},
+    {"num": "35", "nome": "THIEGO SOARES SILVA", "ra": "000112633736", "ra_dig": "5", "ra_uf": "SP", "nasc": "2012-02-23", "nasc_fmt": "23/02/2012", "educacenso": "124168664430", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA SANTA MATILDE - 224, CONJ RES JD CANAA - SAO PAULO - SP", "def": ""},
+    {"num": "36", "nome": "VICTOR ALMEIDA SANTOS", "ra": "000112621988", "ra_dig": "5", "ra_uf": "SP", "nasc": "2011-09-21", "nasc_fmt": "21/09/2011", "educacenso": "124168181552", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA RAUL MARQUES MARINHO - 37, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "37", "nome": "VICTOR GABRIEL DE CASTRO SOUZA", "ra": "000112056571", "ra_dig": "6", "ra_uf": "SP", "nasc": "2011-07-04", "nasc_fmt": "04/07/2011", "educacenso": "123249099103", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "PEIXOTO MELO FILHO - 668, JARDIM SAO JORGE - SAO PAULO - SP", "def": ""},
+    {"num": "38", "nome": "MARIA FERNANDA ALVES CAIRES", "ra": "000114844572", "ra_dig": "9", "ra_uf": "SP", "nasc": "2012-03-02", "nasc_fmt": "02/03/2012", "educacenso": "", "mat_inicio": "31/03/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA FRANCISCO TELES DOURADO - 273, JARDIM PRUDÊNCIA - SAO PAULO - SP", "def": ""},
+    {"num": "39", "nome": "ARTHUR APARECIDO MARQUES COSTA VITALINO", "ra": "000115019925", "ra_dig": "8", "ra_uf": "SP", "nasc": "2011-03-22", "nasc_fmt": "22/03/2011", "educacenso": "124252360900", "mat_inicio": "21/05/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA RUBEM DE SOUZA - 454, VILA INGLESA - SAO PAULO - SP", "def": ""},
   ],
-  '9B': [
-    {num:'1',nome:'ADRIAN VITÓRIO DE SÁ ARAÚJO'},
-    {num:'2',nome:'ALICE CARVALHO DE FARIAS'},
-    {num:'3',nome:'ANA CAROLINE MACEDO DA SILVA'},
-    {num:'4',nome:'ANALUCE BEATRIZ DOS SANTOS PONTES'},
-    {num:'5',nome:'ANNA JULIA ESPICASKI CALCANHO'},
-    {num:'6',nome:'BEATRIZ INFANTI LOTÉRIO DE OLIVEIRA'},
-    {num:'7',nome:'BEATRIZ MARQUES SANT\'ANNA'},
-    {num:'8',nome:'EDUARDA NAVARRO DA SILVA'},
-    {num:'9',nome:'EDUARDO COSTA OLIVEIRA'},
-    {num:'10',nome:'FABRICIO DE ALMEIDA VASCONCELOS'},
-    {num:'11',nome:'GUILHERME BORGES FERREIRA'},
-    {num:'12',nome:'GUILHERME KELVYN SANTOS FAGUNDES'},
-    {num:'13',nome:'GUSTAVO RIBEIRO LIMA ISMAEL'},
-    {num:'14',nome:'ISABELLE INFANTI LOTÉRIO DE OLIVEIRA'},
-    {num:'15',nome:'JOAO VITOR FERREIRA SOUZA'},
-    {num:'16',nome:'JOSE CARLOS GOMES DA SILVA'},
-    {num:'17',nome:'JULIA BARRETO COSTA'},
-    {num:'18',nome:'KAROLLINY GABRIELA DA SILVA COSTA'},
-    {num:'19',nome:'LAIS RODRIGUES DOS SANTOS'},
-    {num:'20',nome:'LUCAS MARTINS PEREIRA'},
-    {num:'21',nome:'LUIZ HENRIQUE DA SILVA SOUSA'},
-    {num:'22',nome:'MARIA CLARA PEREIRA SILVA'},
-    {num:'23',nome:'MARIA FERNANDA SALDANHA DE OLIVEIRA'},
-    {num:'24',nome:'MARIA LUIZA MARINHO ABATE'},
-    {num:'25',nome:'MATHEUS ROCHA AMARAL LUZ'},
-    {num:'26',nome:'NICOLLY LOPES DE SOUZA'},
-    {num:'27',nome:'PEDRO GONCALVES MERCIER'},
-    {num:'28',nome:'PEDRO HENRIQUE OLIVEIRA SANTOS'},
-    {num:'29',nome:'RYAN MARCOLINO ALVES'},
-    {num:'30',nome:'SOPHIA CRISTINA ALMEIDA DE ASSIS'},
-    {num:'31',nome:'SOPHIA FELICIO GONÇALVES'},
-    {num:'32',nome:'STÉPHANIE DALESSIO FIGUEIRA SOKOLOWSKI'},
-    {num:'33',nome:'THALLES RONALD CAVALCANTE SILVA'},
-    {num:'34',nome:'THIAGO HENRIQUE DA SILVA CANDIDO'},
-    {num:'35',nome:'VICTOR ANDRÉ FRANÇA SANTOS'},
-    {num:'36',nome:'YASMIN PEREIRA CARVALHO'},
-    {num:'37',nome:'LUIZ HENRIQUE CARDOSO FERRAZ'}
+  "9B":[
+    {"num": "1", "nome": "ADRIAN VITÓRIO DE SÁ ARAÚJO", "ra": "000114872675", "ra_dig": "5", "ra_uf": "SP", "nasc": "2010-11-26", "nasc_fmt": "26/11/2010", "educacenso": "128242494206", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA EDUARDO AMIGO - 371, JARDIM UMUARAMA - SAO PAULO - SP", "def": ""},
+    {"num": "2", "nome": "ALICE CARVALHO DE FARIAS", "ra": "000113312173", "ra_dig": "1", "ra_uf": "SP", "nasc": "2011-08-03", "nasc_fmt": "03/08/2011", "educacenso": "124168467529", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA TOMÁS TEIXEIRA - 662, VILA CONSTANÇA - SAO PAULO - SP", "def": ""},
+    {"num": "3", "nome": "ANA CAROLINE MACÊDO DA SILVA", "ra": "000114077788", "ra_dig": "9", "ra_uf": "SP", "nasc": "2011-08-10", "nasc_fmt": "10/08/2011", "educacenso": "125275479319", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA LUÍS CARLOS PARANÁ - 244, JARDIM CIDÁLIA - SAO PAULO - SP", "def": ""},
+    {"num": "4", "nome": "ANALUCE BEATRIZ DOS SANTOS PONTES", "ra": "000114076203", "ra_dig": "5", "ra_uf": "SP", "nasc": "2011-05-31", "nasc_fmt": "31/05/2011", "educacenso": "125269958502", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA ALCIDES MACIEL - 59, VILA SÃO PAULO - SAO PAULO - SP", "def": ""},
+    {"num": "5", "nome": "ANNA JULIA ESPICASKI CALCANHO", "ra": "000116784722", "ra_dig": "2", "ra_uf": "SP", "nasc": "2012-02-16", "nasc_fmt": "16/02/2012", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA DAS CAVAS - 330, VILA SANTA CATARINA - SAO PAULO - SP", "def": ""},
+    {"num": "6", "nome": "BEATRIZ INFANTI LOTÉRIO DE OLIVEIRA", "ra": "000113476679", "ra_dig": "8", "ra_uf": "SP", "nasc": "2012-01-28", "nasc_fmt": "28/01/2012", "educacenso": "125276130476", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA RUBEM DE SOUZA - 79, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "7", "nome": "BEATRIZ MARQUES SANT'ANNA", "ra": "000112361182", "ra_dig": "8", "ra_uf": "SP", "nasc": "2011-04-13", "nasc_fmt": "13/04/2011", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA VICENTE PEREIRA DE ASSUNCAO - 55, VILA CONSTANCA - SAO PAULO - SP", "def": ""},
+    {"num": "8", "nome": "EDUARDA NAVARRO DA SILVA", "ra": "000113493301", "ra_dig": "0", "ra_uf": "SP", "nasc": "2011-10-04", "nasc_fmt": "04/10/2011", "educacenso": "125269796332", "mat_inicio": "18/03/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "LEONIDAS MOREIRA - 22, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "9", "nome": "EDUARDO COSTA OLIVEIRA", "ra": "000111690787", "ra_dig": "2", "ra_uf": "SP", "nasc": "2011-04-10", "nasc_fmt": "10/04/2011", "educacenso": "123275154590", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA JOSEPHINA MARTINELLI DA SILVA - 79, VL STA CATARINA - SAO PAULO - SP", "def": ""},
+    {"num": "10", "nome": "FABRICIO DE ALMEIDA VASCONCELOS", "ra": "000114472999", "ra_dig": "3", "ra_uf": "SP", "nasc": "2012-04-19", "nasc_fmt": "19/04/2012", "educacenso": "128243172130", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "PROFESSOR ALVARO GUIMARAES FILHO - 285, VILA IMPERIO - SAO PAULO - SP", "def": ""},
+    {"num": "11", "nome": "GUILHERME BORGES FERREIRA", "ra": "000113322995", "ra_dig": "5", "ra_uf": "SP", "nasc": "2011-04-19", "nasc_fmt": "19/04/2011", "educacenso": "124168181633", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "R JOSE ANTONIO MARTINS - 3, VL S PAULO - SAO PAULO - SP", "def": ""},
+    {"num": "12", "nome": "GUILHERME KELVYN SANTOS FAGUNDES", "ra": "000124944958", "ra_dig": "3", "ra_uf": "SP", "nasc": "2011-06-21", "nasc_fmt": "21/06/2011", "educacenso": "", "mat_inicio": "25/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA CAMARATINGA - 51, JARDIM ALVORADA (ZONA SUL) - SAO PAULO - SP", "def": ""},
+    {"num": "13", "nome": "GUSTAVO RIBEIRO LIMA ISMAEL", "ra": "000113304618", "ra_dig": "6", "ra_uf": "SP", "nasc": "2011-06-11", "nasc_fmt": "11/06/2011", "educacenso": "124168371335", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "AVENIDA ESTEVAO MENDONCA - 3, VILA SANTA CATARINA - SAO PAULO - SP", "def": ""},
+    {"num": "14", "nome": "ISABELLE INFANTI LOTÉRIO DE OLIVEIRA", "ra": "000113476681", "ra_dig": "6", "ra_uf": "SP", "nasc": "2012-01-28", "nasc_fmt": "28/01/2012", "educacenso": "125276130395", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA RUBEM DE SOUZA - 79, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "15", "nome": "JOÃO VITOR FERREIRA SOUZA", "ra": "000115145545", "ra_dig": "3", "ra_uf": "SP", "nasc": "2011-12-30", "nasc_fmt": "30/12/2011", "educacenso": "130366626778", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA DOS CAFEZAIS - 759, VILA SANTA CATARINA - SAO PAULO - SP", "def": ""},
+    {"num": "16", "nome": "JOSÉ CARLOS GOMES DA SILVA", "ra": "000113538854", "ra_dig": "4", "ra_uf": "SP", "nasc": "2011-08-16", "nasc_fmt": "16/08/2011", "educacenso": "125275396294", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA PADRE BENTO IBANEZ - 545, JARDIM PRUDENCIA - SAO PAULO - SP", "def": ""},
+    {"num": "17", "nome": "JULIA BARRETO COSTA", "ra": "000114972925", "ra_dig": "9", "ra_uf": "SP", "nasc": "2011-09-03", "nasc_fmt": "03/09/2011", "educacenso": "128307021072", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA WILSON VALLIM - 83, VILA SÃO PAULO - SAO PAULO - SP", "def": ""},
+    {"num": "18", "nome": "KAROLLINY GABRIELA DA SILVA COSTA", "ra": "000113506364", "ra_dig": "3", "ra_uf": "SP", "nasc": "2012-03-16", "nasc_fmt": "16/03/2012", "educacenso": "125269959142", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA JOSE ANTONIO MARTINS - 316, VL S PAULO - SAO PAULO - SP", "def": ""},
+    {"num": "19", "nome": "LAIS RODRIGUES DOS SANTOS", "ra": "000113475636", "ra_dig": "7", "ra_uf": "SP", "nasc": "2011-08-06", "nasc_fmt": "06/08/2011", "educacenso": "126171363706", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "AVENIDA BENTO XV - 189, VILA MISSIONÁRIA - SAO PAULO - SP", "def": ""},
+    {"num": "20", "nome": "LUCAS MARTINS PEREIRA", "ra": "000115623069", "ra_dig": "X", "ra_uf": "SP", "nasc": "2011-07-30", "nasc_fmt": "30/07/2011", "educacenso": "130523565851", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "ALCIDES MACIEL - 33, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "21", "nome": "LUIZ HENRIQUE DA SILVA SOUSA", "ra": "000111741666", "ra_dig": "5", "ra_uf": "SP", "nasc": "2011-04-19", "nasc_fmt": "19/04/2011", "educacenso": "123279775840", "mat_inicio": "25/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA FERNÃO LOPES - 67, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "22", "nome": "MARIA CLARA PEREIRA SILVA", "ra": "000114209202", "ra_dig": "1", "ra_uf": "SP", "nasc": "2012-02-22", "nasc_fmt": "22/02/2012", "educacenso": "128242728649", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RAUL MARQUES MARINHO - 376, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "23", "nome": "MARIA FERNANDA SALDANHA DE OLIVEIRA", "ra": "000113502395", "ra_dig": "5", "ra_uf": "SP", "nasc": "2011-12-01", "nasc_fmt": "01/12/2011", "educacenso": "", "mat_inicio": "26/03/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA FRANCISCO LOPES PINTO - 101, JARDIM PRUDÊNCIA - SAO PAULO - SP", "def": ""},
+    {"num": "24", "nome": "MARIA LUIZA MARINHO ABATE", "ra": "000113304949", "ra_dig": "7", "ra_uf": "SP", "nasc": "2012-02-02", "nasc_fmt": "02/02/2012", "educacenso": "124168535540", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA LUCINDO DOS PASSOS - 110, JARDIM PRUDÊNCIA - SAO PAULO - SP", "def": ""},
+    {"num": "25", "nome": "MATHEUS ROCHA AMARAL LUZ", "ra": "000114076023", "ra_dig": "3", "ra_uf": "SP", "nasc": "2011-09-25", "nasc_fmt": "25/09/2011", "educacenso": "125275295692", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "R RUBEM DE SOUZA - 515, VL INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "26", "nome": "PEDRO GONÇALVES MERCIER", "ra": "000120747234", "ra_dig": "7", "ra_uf": "SP", "nasc": "2011-05-24", "nasc_fmt": "24/05/2011", "educacenso": "", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA EDUARDO AMIGO - 94, JARDIM UMUARAMA - SAO PAULO - SP", "def": ""},
+    {"num": "27", "nome": "PEDRO HENRIQUE OLIVEIRA SANTOS", "ra": "000114584472", "ra_dig": "8", "ra_uf": "SP", "nasc": "2011-09-09", "nasc_fmt": "09/09/2011", "educacenso": "126146362408", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA SAMUEL ENDLER - 31A, JARDIM ALVORADA (ZONA SUL) - SAO PAULO - SP", "def": ""},
+    {"num": "28", "nome": "RYAN MARCOLINO ALVES", "ra": "000115850156", "ra_dig": "0", "ra_uf": "SP", "nasc": "2012-01-19", "nasc_fmt": "19/01/2012", "educacenso": "169004551904", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA ALBA - 1969, VILA PARQUE JABAQUARA - SAO PAULO - SP", "def": ""},
+    {"num": "29", "nome": "SOPHIA CRISTINA ALMEIDA DE ASSIS", "ra": "000114190665", "ra_dig": "X", "ra_uf": "SP", "nasc": "2011-05-16", "nasc_fmt": "16/05/2011", "educacenso": "128243125131", "mat_inicio": "13/03/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "SALVADOR OLIVEIRA PAES - 324, JARDIM SELMA - SAO PAULO - SP", "def": ""},
+    {"num": "30", "nome": "SOPHIA FELICIO GONÇALVES", "ra": "000114714698", "ra_dig": "6", "ra_uf": "SP", "nasc": "2010-05-05", "nasc_fmt": "05/05/2010", "educacenso": "128242494125", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA WILSON RIBEIRO BONFIM - 67, VL INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "31", "nome": "STÉPHANIE DALESSIO FIGUEIRA SOKOLOWSKI", "ra": "000113506453", "ra_dig": "2", "ra_uf": "SP", "nasc": "2010-10-02", "nasc_fmt": "02/10/2010", "educacenso": "125269959576", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA OSSIAN TERCEIRO TELES - 582, VILA PRUDENCIA - SAO PAULO - SP", "def": ""},
+    {"num": "32", "nome": "THALLES RONALD CAVALCANTE SILVA", "ra": "000114436747", "ra_dig": "5", "ra_uf": "SP", "nasc": "2011-07-14", "nasc_fmt": "14/07/2011", "educacenso": "128243224032", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "DAMASCENO VIEIRA - 1080, VILA MASCOTE - SAO PAULO - SP", "def": ""},
+    {"num": "33", "nome": "THIAGO HENRIQUE DA SILVA CANDIDO", "ra": "000115323162", "ra_dig": "1", "ra_uf": "SP", "nasc": "2011-04-11", "nasc_fmt": "11/04/2011", "educacenso": "126216133224", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA ANGÉLICA CATALANI - 37, JARDIM MARTINI - SAO PAULO - SP", "def": ""},
+    {"num": "34", "nome": "VICTOR ANDRÉ FRANÇA SANTOS", "ra": "000113311120", "ra_dig": "8", "ra_uf": "SP", "nasc": "2012-03-05", "nasc_fmt": "05/03/2012", "educacenso": "124169156144", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "CAMARATINGA - 50, JARDIM ALVORADA ZONA SUL - SAO PAULO - SP", "def": ""},
+    {"num": "35", "nome": "YASMIN PEREIRA CARVALHO", "ra": "000116700080", "ra_dig": "8", "ra_uf": "SP", "nasc": "2011-12-20", "nasc_fmt": "20/12/2011", "educacenso": "169005845278", "mat_inicio": "02/02/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA WILSON RIBEIRO BONFIM - 94, VILA INGLESA - SAO PAULO - SP", "def": ""},
+    {"num": "36", "nome": "LUIZ HENRIQUE CARDOSO FERRAZ", "ra": "000113533038", "ra_dig": "4", "ra_uf": "SP", "nasc": "2011-08-24", "nasc_fmt": "24/08/2011", "educacenso": "125275676300", "mat_inicio": "21/05/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "AVENIDA EDUARDO PEREIRA RAMOS - 764, JARDIM SÃO JORGE - SAO PAULO - SP", "def": ""},
+    {"num": "37", "nome": "NICOLE GABRIELA MULLER PEREIRA DELFINO", "ra": "000114434711", "ra_dig": "7", "ra_uf": "SP", "nasc": "2011-12-27", "nasc_fmt": "27/12/2011", "educacenso": "130524416809", "mat_inicio": "26/06/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "AV CUPECE - 1846, JARDIM PRUDENCIA - SAO PAULO - SP", "def": ""},
+    {"num": "38", "nome": "LORENA GOMES FARIAS", "ra": "000115086318", "ra_dig": "3", "ra_uf": "SP", "nasc": "2011-10-31", "nasc_fmt": "31/10/2011", "educacenso": "179203254390", "mat_inicio": "27/07/2026", "mat_fim": "18/12/2026", "sit": "ATIVO", "end": "RUA FRANCISCO FELIPPE AGOSTI - 80, VILA INGLESA - SAO PAULO - SP", "def": ""},
   ],
-};
-
-const CATS = {
-  1: {
-    label:'Engajamento Acadêmico e PEI', color:'#3b72c8',
-    items:[
-      'Uso do tempo pedagógico para atividades alheias à aula',
-      'Recusa sistemática em realizar atividades propostas',
-      'Não entrega recorrente de atividades',
-      'Não participação em aula, mesmo quando solicitado',
-      'Presença física sem engajamento pedagógico contínuo',
-      'Desorganização persistente de materiais',
-      'Ausência injustificada em Tutoria'
-    ]
-  },
-  2: {
-    label:'Frequência e Rotina Escolar', color:'#28a745',
-    items:[
-      'Atrasos frequentes no início das aulas',
-      'Faltas recorrentes nos eixos do PEI',
-      'Saídas constantes da sala sem autorização',
-      'Não realização das atividades de compensação de ausências'
-    ]
-  },
-  3: {
-    label:'Convivência e Clima de Sala', color:'#d4a017',
-    items:[
-      'Conversas paralelas persistentes',
-      'Postura provocativa ou desafiadora em sala',
-      'Uso inadequado de celular durante a aula',
-      'Resistência reiterada a orientações pedagógicas',
-      'Interrupções frequentes da fala do professor ou colegas',
-      'Riso, ironia ou desqualificação da participação de colegas',
-      'Desrespeito verbal pontual (sem xingamento grave)',
-      'Incitação à desorganização da turma'
-    ]
-  },
-  4: {
-    label:'Linguagem, Respeito e Direitos Humanos', color:'#e07020',
-    items:[
-      'Uso de apelidos pejorativos',
-      'Comentários depreciativos sobre colegas',
-      'Desrespeito reiterado à identidade ou condição do outro',
-      'Minimização ou normalização de falas ofensivas'
-    ]
-  },
-  5: {
-    label:'Conflitos Interpessoais', color:'#c0392b',
-    items:[
-      'Provocações persistentes direcionadas',
-      'Discussão verbal acalorada entre alunos',
-      'Resistência à mediação proposta pela escola',
-      'Conflitos recorrentes entre os mesmos estudantes',
-      'Ameaças verbais (sem agressão física)'
-    ]
-  },
-  6: {
-    label:'Aspectos Emocionais e Psicossociais', color:'#7b2d96',
-    items:[
-      'Dificuldade extrema de concentração',
-      'Irritabilidade excessiva',
-      'Mudança brusca de comportamento',
-      'Cansaço excessivo recorrente',
-      'Falas de desvalorização pessoal'
-    ]
-  },
-  7: {
-    label:'Relação com o Espaço Escolar', color:'#7d5a3c',
-    items:[
-      'Uso inadequado de mobiliário ou materiais',
-      'Resistência às normas de uso dos espaços comuns',
-      'Desorganização intencional do ambiente',
-      'Descuido recorrente com o patrimônio'
-    ]
-  }
 };
 
 const TURMA_LABELS = {
@@ -1637,6 +1544,30 @@ const TURMA_LABELS = {
 
 const PASSWORD = 'sim2026';
 const STORAGE_KEY = 'rave_simioni_records';
+
+// ═══════ SUPABASE CONFIG (Anos Finais) ═══════
+const SUPABASE_URL = "https://shggcytvtyzbaqdmsbln.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_V50P1LM4skolasnrCC-vmQ_z2ZWyKax";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let RECORDS_CACHE = [];
+
+async function loadRecordsFromSupabase(){
+  const {data,error} = await sb.from('ocorrencias_ef').select('*').order('data',{ascending:true});
+  if(error){ console.error(error); alert('Erro ao carregar ocorrências do Supabase: '+error.message); return; }
+  RECORDS_CACHE = (data||[]).map(row=>({
+    id:row.id, ts:row.created_at||row.ts||row.data,
+    data:row.data, turma:row.turma, aluno:row.aluno, comp:row.comp,
+    cats:row.cats||{}, obs:row.obs||"", enc:row.enc||"",
+    // aliases usados em partes legadas do EF
+    categorias: (()=>{ const c=row.cats||{}; return Object.values(c).flat(); })(),
+    descricao: row.obs||"",
+    observacao: row.obs||"",
+    encaminhamento: row.enc||"",
+    createdAt: row.created_at||row.ts||row.data
+  }));
+}
+
+
 
 // ════════════════════════════════════════════════
 // INIT
@@ -1685,7 +1616,7 @@ function getChecked(catNum) {
   return [...document.querySelectorAll(`#cat${catNum}-checks input:checked`)].map(c=>c.value);
 }
 
-function submitForm() {
+async function submitForm() {
   const comp = document.getElementById('f-comp').value;
   const data = document.getElementById('f-data').value;
   const turmaRaw = document.getElementById('f-turma').value;
@@ -1709,8 +1640,6 @@ function submitForm() {
   }
 
   const record = {
-    id: Date.now(),
-    ts: new Date().toISOString(),
     data,
     turma,
     aluno: alunoNome,
@@ -1720,9 +1649,9 @@ function submitForm() {
     enc: document.getElementById('f-enc').value
   };
 
-  const records = getRecords();
-  records.push(record);
-  saveRecords(records);
+  const {error} = await sb.from('ocorrencias_ef').insert(record);
+  if(error){ alert('Erro ao salvar no Supabase: '+error.message); return; }
+  await loadRecordsFromSupabase();
 
   // reset
   document.getElementById('f-comp').value = '';
@@ -1739,6 +1668,7 @@ function submitForm() {
   showToast();
 }
 
+
 function showToast(){
   const t = document.getElementById('toast');
   t.classList.add('show');
@@ -1748,8 +1678,8 @@ function showToast(){
 // ════════════════════════════════════════════════
 // STORAGE
 // ════════════════════════════════════════════════
-function getRecords(){ try{ return JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]'); }catch(e){return [];} }
-function saveRecords(r){ localStorage.setItem(STORAGE_KEY, JSON.stringify(r)); }
+function getRecords(){ return RECORDS_CACHE; }
+function saveRecords(r){ RECORDS_CACHE = r; /* persistência via Supabase em submitForm */ }
 
 // ════════════════════════════════════════════════
 // TABS
@@ -2199,6 +2129,37 @@ function buildHeatmap(all){
 // ═══════════════════════════════════════════════════════════
 const CAB_IMG = 'data:image/png;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADb/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkMEQ8SEhEPERETFhwXExQaFRERGCEYGh0dHx8fExciJCIeJBweHx7/2wBDAQUFBQcGBw4ICA4eFBEUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh7/wAARCAC7A9cDASIAAhEBAxEB/8QAHQABAAMBAQEBAQEAAAAAAAAAAAQGBwUIAwECCf/EAEoQAAAGAgECAwYEAggDBQcFAQABAgMEBQYREgchExUxFCJBZJTSCDJRYRaDIyQ1QlJxgbMXM5EJGDRWYiU2VXKVwdFDdHWhtcT/xAAcAQEAAwACAwAAAAAAAAAAAAAAAwUGAQQCBwj/xAAsEQEAAgEDAAgFBQAAAAAAAAAAAQIDBAURBhIhMUFRcaETMzVisXKBkcHR/9oADAMBAAIRAxEAPwD1nVwI8mKbzxvqWbrpGZSHElonFEXYj16EQleUwvmPqnPuCi/s7+c9/uKE4BB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOfcHlML5j6pz7hOABB8phfMfVOf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';
 
+
+function findAluno(turma, nome){
+  const n = String(nome||'').trim().toUpperCase();
+  const list = (ALUNOS[turma]||[]);
+  let a = list.find(x => String(x.nome).toUpperCase() === n);
+  if(a) return a;
+  const ex = (typeof getExtras==='function' ? getExtras() : {})[turma]||[];
+  a = ex.find(x => String(x.nome).toUpperCase() === n);
+  return a || null;
+}
+
+function blocoDadosAluno(turma, alunoNome){
+  const a = findAluno(turma, alunoNome);
+  if(!a){
+    return `<strong>Estudante:</strong> ${alunoNome}<br>
+        <strong>Turma/Série:</strong> ${TURMA_LABELS[turma]||turma}<br>`;
+  }
+  const raFull = a.ra ? `${a.ra}${a.ra_dig?`-`+a.ra_dig:''}/${a.ra_uf||'SP'}` : '—';
+  const nasc = a.nasc_fmt || (a.nasc ? (typeof fmtDate==='function'?fmtDate(a.nasc):a.nasc) : '—');
+  return `<strong>Estudante:</strong> ${a.nome}<br>
+        <strong>Turma/Série:</strong> ${TURMA_LABELS[turma]||turma}<br>
+        <strong>RA:</strong> ${raFull}<br>
+        <strong>Data de Nascimento:</strong> ${nasc}<br>
+        <strong>Identificação Única (Educacenso):</strong> ${a.educacenso||'—'}<br>
+        <strong>Data Início Matrícula:</strong> ${a.mat_inicio||'—'}<br>
+        <strong>Data Fim Matrícula:</strong> ${a.mat_fim||'—'}<br>
+        <strong>Situação:</strong> ${a.sit||'ATIVO'}<br>
+        <strong>Endereço:</strong> ${a.end||'—'}<br>
+        ${a.def?`<strong>Condição educacional especial:</strong> ${a.def}<br>`:''}`;
+}
+
 function gerarRelatorio(tipo){
   const turmaFilter = document.getElementById('d-turma').value;
   const alunoFilter = document.getElementById('d-aluno').value;
@@ -2248,8 +2209,8 @@ function gerarRelatorio(tipo){
 
   const signBlock = isTC
     ? `<div class="rel-sign">
-        <div class="rel-sign-field">_____________________________________<br>Diretor(a) Escolar<br>Carimbo e Assinatura</div>
-        <div class="rel-sign-field">_____________________________________<br>Conselheiro(a) Tutelar Responsável<br>Assinatura / Matrícula</div>
+        <div class="rel-sign-field">_____________________________________<br>Direção da Unidade Escolar<br>Carimbo e Assinatura</div>
+        <div class="rel-sign-field">_____________________________________<br>Coordenação Pedagógica Geral<br>Carimbo e Assinatura</div>
       </div>
       <p style="font-size:8pt;color:#888;margin-top:16px;text-align:center">Documento gerado pelo sistema R.A.V.E. em ${dataFmt} · EE Prof. Luiz Simioni Sobrinho · SEDUC-SP / SUL 1</p>`
     : `<div class="rel-sign">
@@ -2264,9 +2225,8 @@ function gerarRelatorio(tipo){
     <div class="rel-title">${titulo}</div>
     <div class="rel-subtitle">São Paulo, ${dataFmt}</div>
     <div class="rel-box">
-      <strong>Estudante:</strong> ${nome} &nbsp;&nbsp;
-      <strong>Turma:</strong> ${turmaLabel} &nbsp;&nbsp;
-      <strong>Total de Ocorrências:</strong> ${totalOcc} &nbsp;&nbsp;
+      ${blocoDadosAluno(turma, nome)}
+      <strong>Total de Ocorrências:</strong> ${totalOcc}<br>
       <strong>Ano Letivo:</strong> ${hoje.getFullYear()}
     </div>
     <div class="rel-body">${intro}</div>
@@ -2288,12 +2248,30 @@ function fecharRelatorio(){
 // BOOT
 // ════════════════════════════════════════════════
 
-// ═══════ CADASTRO DE ALUNOS ═══════
-function _cadKey(){return typeof CAD_KEY!=='undefined'?CAD_KEY:'rave_cad_extra';}
-function getExtras(){try{return JSON.parse(localStorage.getItem(_cadKey())||'{}');}catch(e){return{};}}
-function saveExtras(obj){localStorage.setItem(_cadKey(),JSON.stringify(obj));}
+
+// ═══════ CADASTRO DE ALUNOS (Supabase + CSV) ═══════
+let EXTRAS_CACHE = {};
+
+async function loadExtrasFromSupabase(){
+  const {data,error} = await sb.from('alunos_extra_ef').select('*').order('nome',{ascending:true});
+  if(error){ console.error(error); return; }
+  const grouped={};
+  (data||[]).forEach(row=>{
+    if(!grouped[row.turma]) grouped[row.turma]=[];
+    grouped[row.turma].push({
+      id:row.id, num:String(grouped[row.turma].length+1),
+      nome:row.nome, nasc:row.nasc, end:row.endereco, def:row.deficiencia,
+      sit:row.sit, manual:true
+    });
+  });
+  EXTRAS_CACHE = grouped;
+}
+
+function getExtras(){ return EXTRAS_CACHE; }
+function saveExtras(obj){ /* legado — Supabase */ }
 
 function mergeAlunos(){
+  Object.keys(ALUNOS).forEach(t=>{ ALUNOS[t]=ALUNOS[t].filter(a=>!a.manual); });
   const ex=getExtras();
   Object.entries(ex).forEach(([t,arr])=>{
     if(!ALUNOS[t])ALUNOS[t]=[];
@@ -2319,41 +2297,124 @@ function calcIdade(nasc){
 }
 function fmtDate(s){if(!s)return'—';const[y,m,d]=s.split('-');return`${d}/${m}/${y}`;}
 
-function cadastrarAluno(){
-  const turma=document.getElementById('cad-turma').value;
-  const nome=document.getElementById('cad-nome').value.trim().toUpperCase();
-  const nasc=document.getElementById('cad-nasc').value;
-  const end=document.getElementById('cad-end').value.trim();
-  const def=document.getElementById('cad-def').value.trim();
-  const sit=document.getElementById('cad-sit').value;
-  if(!turma||!nome){alert('Preencha Turma e Nome.');return;}
-  const ex=getExtras();
-  if(!ex[turma])ex[turma]=[];
-  if(ex[turma].find(a=>a.nome===nome)){alert('Estudante já cadastrado nesta turma.');return;}
-  const num=String((ALUNOS[turma]||[]).length+ex[turma].length+1);
-  const novo={num,nome,nasc,end,def,sit,manual:true};
-  ex[turma].push(novo);
-  saveExtras(ex);
-  if(!ALUNOS[turma])ALUNOS[turma]=[];
-  ALUNOS[turma].push(novo);
-  document.getElementById('cad-nome').value='';
-  document.getElementById('cad-nasc').value='';
-  document.getElementById('cad-end').value='';
-  document.getElementById('cad-def').value='';
-  document.getElementById('cad-turma').value='';
-  renderCadList();loadAlunos();loadDashAlunos();
-  const t=document.getElementById('toast');
-  t.textContent=`✅ ${nome} cadastrado(a) em ${TURMA_LABELS[turma]||turma}!`;
-  t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3200);
+function resolveTurmaKey(raw){
+  if(!raw) return null;
+  const s=String(raw).trim();
+  if(TURMA_LABELS[s]) return s;
+  const found=Object.entries(TURMA_LABELS).find(([,label])=>label.toLowerCase()===s.toLowerCase());
+  if(found) return found[0];
+  const m=s.match(/\b([6-9][A-C])\b/i);
+  if(m && TURMA_LABELS[m[1].toUpperCase()]) return m[1].toUpperCase();
+  return null;
 }
 
-function deletarCadastro(turma,nome){
+function parseNascCSV(val){
+  if(!val) return null;
+  const s=String(val).trim();
+  if(!s || s==='—') return null;
+  let m=s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if(m) return `${m[3]}-${m[2]}-${m[1]}`;
+  m=s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(m) return s;
+  return null;
+}
+
+function parseCSVLine(line){
+  const out=[];
+  let cur='', inQ=false;
+  for(let i=0;i<line.length;i++){
+    const ch=line[i];
+    if(inQ){
+      if(ch==='"'){ if(line[i+1]==='"'){ cur+='"'; i++; } else inQ=false; }
+      else cur+=ch;
+    } else {
+      if(ch==='"') inQ=true;
+      else if(ch===','){ out.push(cur); cur=''; }
+      else cur+=ch;
+    }
+  }
+  out.push(cur);
+  return out.map(c=>c.trim());
+}
+
+function normalizeSit(s){
+  if(!s) return 'ATIVO';
+  const u=String(s).trim().toUpperCase();
+  if(u.startsWith('TRAN')) return 'TRAN';
+  if(u.startsWith('REMA')) return 'REMA';
+  return 'ATIVO';
+}
+
+async function atualizarAlunosCSV(){
+  const input=document.getElementById('cad-csv-file');
+  const status=document.getElementById('cad-import-status');
+  const btn=document.getElementById('btn-import-csv');
+  if(!input || !input.files || !input.files[0]){ alert('Selecione um arquivo CSV.'); return; }
+  status.style.display='block'; status.style.color='var(--text-muted)'; status.textContent='Lendo arquivo…';
+  if(btn) btn.disabled=true;
+  let textContent;
+  try{ textContent=await input.files[0].text(); }catch(e){
+    status.style.color='#c0392b'; status.textContent='Erro ao ler o arquivo.'; if(btn) btn.disabled=false; return;
+  }
+  if(textContent.charCodeAt(0)===0xFEFF) textContent=textContent.slice(1);
+  const lines=textContent.split(/\r?\n/).filter(l=>l.trim().length);
+  if(lines.length<2){ status.style.color='#c0392b'; status.textContent='CSV vazio.'; if(btn) btn.disabled=false; return; }
+  const header=parseCSVLine(lines[0]).map(h=>h.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''));
+  const idx={};
+  header.forEach((h,i)=>{
+    if(h.includes('turma')) idx.turma=i;
+    else if(h==='nome' || h.includes('nome')) idx.nome=i;
+    else if(h.includes('nasc')) idx.nasc=i;
+    else if(h.includes('endere') || h.includes('end')) idx.end=i;
+    else if(h.includes('defic') || h.includes('condic')) idx.def=i;
+    else if(h.includes('situa') || h==='sit') idx.sit=i;
+  });
+  if(idx.turma===undefined || idx.nome===undefined){
+    status.style.color='#c0392b'; status.textContent='Cabeçalho inválido: Turma e Nome são obrigatórios.'; if(btn) btn.disabled=false; return;
+  }
+  const {data: existing, error: loadErr}=await sb.from('alunos_extra_ef').select('*');
+  if(loadErr){ status.style.color='#c0392b'; status.textContent='Erro: '+loadErr.message; if(btn) btn.disabled=false; return; }
+  const map={};
+  (existing||[]).forEach(r=>{ map[`${r.turma}|${String(r.nome).toUpperCase()}`]=r; });
+  let inserted=0, updated=0, skipped=0, errors=0;
+  for(let li=1; li<lines.length; li++){
+    const cols=parseCSVLine(lines[li]);
+    if(!cols.length || cols.every(c=>!c)) continue;
+    const turma=resolveTurmaKey(cols[idx.turma]||'');
+    const nomeRaw=(cols[idx.nome]||'').trim().toUpperCase();
+    if(!turma || !nomeRaw){ skipped++; continue; }
+    const payload={
+      turma, nome: nomeRaw,
+      nasc: idx.nasc!==undefined ? parseNascCSV(cols[idx.nasc]) : null,
+      endereco: idx.end!==undefined ? (cols[idx.end]||'').trim() || null : null,
+      deficiencia: idx.def!==undefined ? (cols[idx.def]||'').trim() || null : null,
+      sit: idx.sit!==undefined ? normalizeSit(cols[idx.sit]) : 'ATIVO'
+    };
+    const key=`${turma}|${nomeRaw}`;
+    try{
+      if(map[key]){
+        const {error}=await sb.from('alunos_extra_ef').update({
+          nasc: payload.nasc, endereco: payload.endereco, deficiencia: payload.deficiencia, sit: payload.sit
+        }).eq('id', map[key].id);
+        if(error) errors++; else updated++;
+      } else {
+        const {error}=await sb.from('alunos_extra_ef').insert(payload);
+        if(error) errors++; else { inserted++; map[key]={...payload}; }
+      }
+    }catch(e){ errors++; }
+  }
+  await loadExtrasFromSupabase(); mergeAlunos(); renderCadList(); loadAlunos(); loadDashAlunos();
+  const summary=`✅ Importação: ${inserted} inserido(s), ${updated} atualizado(s), ${skipped} ignorado(s), ${errors} erro(s).`;
+  status.style.color= errors ? '#856404' : 'var(--success)'; status.textContent=summary;
+  if(btn) btn.disabled=false; if(input) input.value='';
+  const t=document.getElementById('toast'); t.textContent=summary; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),4200);
+}
+
+async function deletarCadastro(turma,nome){
   if(!confirm(`Remover "${nome}" da turma ${TURMA_LABELS[turma]||turma}?`))return;
-  const ex=getExtras();
-  if(ex[turma]){ex[turma]=ex[turma].filter(a=>a.nome!==nome);if(!ex[turma].length)delete ex[turma];}
-  saveExtras(ex);
-  if(ALUNOS[turma])ALUNOS[turma]=ALUNOS[turma].filter(a=>a.nome!==nome||!a.manual);
-  renderCadList();loadAlunos();loadDashAlunos();
+  const {error}=await sb.from('alunos_extra_ef').delete().eq('turma',turma).eq('nome',nome);
+  if(error){ alert('Erro ao excluir: '+error.message); return; }
+  await loadExtrasFromSupabase(); mergeAlunos(); renderCadList(); loadAlunos(); loadDashAlunos();
 }
 
 function renderCadList(){
@@ -2361,7 +2422,7 @@ function renderCadList(){
   if(!container)return;
   const ex=getExtras();
   const turmas=Object.keys(TURMA_LABELS).filter(t=>ex[t]&&ex[t].length);
-  if(!turmas.length){container.innerHTML='<p style="color:var(--text-muted);font-size:.82rem;padding:8px 0">Nenhum estudante cadastrado manualmente ainda.</p>';return;}
+  if(!turmas.length){container.innerHTML='<p style="color:var(--text-muted);font-size:.82rem;padding:8px 0">Nenhum estudante importado ainda.</p>';return;}
   let html='';
   turmas.forEach(turma=>{
     html+=`<div class="turma-sec"><div class="turma-ttl">${TURMA_LABELS[turma]||turma} <span class="cad-count">${ex[turma].length}</span></div>
@@ -2388,19 +2449,22 @@ function exportarCadastros(){
   const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
   const url=URL.createObjectURL(blob);
   const el=document.createElement('a');
-  el.href=url;el.download='cadastros_rave.csv';el.click();URL.revokeObjectURL(url);
+  el.href=url;el.download='cadastros_rave_ef.csv';el.click();URL.revokeObjectURL(url);
 }
 
-const CAD_KEY="rave_ef_cad_extra";
-
 // BOOT
-buildCategoryChecks();
-setTodayDate();
-mergeAlunos();
-loadDashAlunos();
-populateCadTurma();
-renderCadList();
-buildGlobalAnalytics();
+(async function boot(){
+  buildCategoryChecks();
+  setTodayDate();
+  populateCadTurma();
+  await loadExtrasFromSupabase();
+  mergeAlunos();
+  loadDashAlunos();
+  renderCadList();
+  if(typeof buildGlobalAnalytics==='function') buildGlobalAnalytics();
+  await loadRecordsFromSupabase();
+})();
+
 </script>
 
 <!-- ═══ RELATÓRIO MODAL ═══ -->
